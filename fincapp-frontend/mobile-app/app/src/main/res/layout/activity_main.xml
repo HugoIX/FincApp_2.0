@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_light">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FincApp"
+            android:textColor="@color/primary_green"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select an operational module"
+            android:textColor="@color/text_dark"
+            android:textSize="18sp"
+            android:layout_marginBottom="32dp" />
+
+        <Button
+            android:id="@+id/btnCattle"
+            android:layout_width="match_parent"
+            android:layout_height="96dp"
+            android:text="🐄  Cattle"
+            android:textSize="24sp"
+            android:contentDescription="Open cattle module"
+            android:layout_marginBottom="18dp" />
+
+        <Button
+            android:id="@+id/btnSwine"
+            android:layout_width="match_parent"
+            android:layout_height="96dp"
+            android:text="🐖  Swine"
+            android:textSize="24sp"
+            android:contentDescription="Open swine module"
+            android:layout_marginBottom="18dp" />
+
+        <Button
+            android:id="@+id/btnPoultry"
+            android:layout_width="match_parent"
+            android:layout_height="96dp"
+            android:text="🐔  Poultry"
+            android:textSize="24sp"
+            android:contentDescription="Open poultry module" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Offline mode ready: local SQLite database initializes on first boot."
+            android:textColor="@color/text_dark"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:layout_marginTop="36dp" />
+
+    </LinearLayout>
+</ScrollView>
