@@ -16,7 +16,7 @@ USING (owner_id = auth.uid());
 CREATE POLICY "owner_sees_own_modules"
 ON production_modules
 FOR SELECT
-USING (
+USING ( 
     farm_id IN (
         SELECT id FROM farms
         WHERE owner_id = auth.uid()
