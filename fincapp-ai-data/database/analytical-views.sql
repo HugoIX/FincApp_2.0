@@ -17,6 +17,7 @@ CREATE OR REPLACE VIEW vw_active_modules_summary AS
         pm.type;
 
 
+
 -- Provides the operational status of each farm based on its active production modules.
 CREATE OR REPLACE VIEW vw_farm_operational_status AS
     SELECT
