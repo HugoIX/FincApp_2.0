@@ -1,0 +1,149 @@
+{
+  "name": "SyncInboundWebhook",
+  "meta": {
+    "description": "US-01-JUANPABLO — Receives multi-tenant farm sync payloads, validates, normalizes by production type (cattle/swine/poultry), verifies tenant in Supabase, then triggers LLMPromptRouter."
+  },
+  "nodes": [
+    {
+      "id": "sync-wh-01",
+      "name": "Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sync/inbound",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURE_IN_N8N",
+          "name": "FincApp Webhook Secret"
+        }
+      }
+    },
+    {
+      "id": "sync-code-02",
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst required = ['owner_id', 'farm_id', 'production_type', 'sync_timestamp', 'data'];\nconst validTypes = ['cattle', 'swine', 'poultry'];\n\nfor (const field of required) {\n  if (payload[field] === undefined || payload[field] === null || payload[field] === '') {\n    throw new Error(`Validation failed: missing required field '${field}'`);\n  }\n}\n\nif (!validTypes.includes(payload.production_type)) {\n  throw new Error(`Validation failed: production_type must be one of [${validTypes.join(', ')}], received '${payload.production_type}'`);\n}\n\nif (typeof payload.data !== 'object' || Array.isArray(payload.data) || payload.data === null) {\n  throw new Error(\"Validation failed: 'data' must be a non-null object\");\n}\n\nreturn [{ json: { ...payload, validated_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "sync-code-03",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nconst d = p.data;\nlet normalized_data;\n\nif (p.production_type === 'cattle') {\n  normalized_data = {\n    head_count: d.head_count ?? 0,\n    average_weight_kg: d.average_weight_kg ?? 0,\n    health_alert_count: Array.isArray(d.health_alerts) ? d.health_alerts.length : 0,\n    health_alerts: d.health_alerts ?? [],\n    feeding_efficiency_pct: d.feeding_efficiency_pct ?? null,\n    pregnancy_count: d.pregnancy_count ?? 0\n  };\n} else if (p.production_type === 'swine') {\n  normalized_data = {\n    head_count: d.head_count ?? 0,\n    average_weight_kg: d.average_weight_kg ?? 0,\n    health_alert_count: Array.isArray(d.health_alerts) ? d.health_alerts.length : 0,\n    health_alerts: d.health_alerts ?? [],\n    gestation_count: d.gestation_count ?? 0,\n    mortality_rate_pct: d.mortality_rate_pct ?? null,\n    feed_conversion_ratio: d.feed_conversion_ratio ?? null\n  };\n} else {\n  normalized_data = {\n    flock_size: d.flock_size ?? 0,\n    average_weight_kg: d.average_weight_kg ?? 0,\n    egg_production_count: d.egg_production_count ?? 0,\n    health_alert_count: Array.isArray(d.health_alerts) ? d.health_alerts.length : 0,\n    health_alerts: d.health_alerts ?? [],\n    feed_conversion_ratio: d.feed_conversion_ratio ?? null,\n    mortality_rate_pct: d.mortality_rate_pct ?? null\n  };\n}\n\nreturn [{\n  json: {\n    owner_id: p.owner_id,\n    farm_id: p.farm_id,\n    production_type: p.production_type,\n    sync_timestamp: p.sync_timestamp,\n    validated_at: p.validated_at,\n    normalized_data\n  }\n}];"
+      }
+    },
+    {
+      "id": "sync-http-04",
+      "name": "Verify Tenant in Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [960, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/vw_farm_operational_status",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "farm_id",  "value": "={{ 'eq.' + $json.farm_id }}" },
+            { "name": "owner_id", "value": "={{ 'eq.' + $json.owner_id }}" },
+            { "name": "select",   "value": "farm_id,owner_id,is_operational" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sync-code-05",
+      "name": "Assert Tenant Valid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "jsCode": "const supabaseResult = $input.first().json;\nconst upstream = $('Normalize Payload').first().json;\n\nif (!Array.isArray(supabaseResult) || supabaseResult.length === 0) {\n  throw new Error(`Tenant not found: farm_id=${upstream.farm_id}, owner_id=${upstream.owner_id}`);\n}\n\nconst farm = supabaseResult[0];\nif (!farm.is_operational) {\n  throw new Error(`Farm ${upstream.farm_id} is not operational — sync rejected`);\n}\n\nreturn [{ json: { ...upstream, tenant_verified: true } }];"
+      }
+    },
+    {
+      "id": "sync-exec-06",
+      "name": "Trigger LLM Router",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1440, 300],
+      "parameters": {
+        "workflowId": "REPLACE_WITH_LLMPromptRouter_WORKFLOW_ID",
+        "waitForSubWorkflow": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "sync-respond-07",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1680, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', response_token: $json.response_token, processed_at: new Date().toISOString() }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Inbound Webhook": {
+      "main": [
+        [{ "node": "Validate Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [{ "node": "Normalize Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [{ "node": "Verify Tenant in Supabase", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verify Tenant in Supabase": {
+      "main": [
+        [{ "node": "Assert Tenant Valid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assert Tenant Valid": {
+      "main": [
+        [{ "node": "Trigger LLM Router", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger LLM Router": {
+      "main": [
+        [{ "node": "Respond Success", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}

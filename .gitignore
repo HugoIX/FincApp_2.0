@@ -1,0 +1,29 @@
+# Secrets & environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+*.env
+
+# n8n local instance data
+fincapp-ai-data/cloud-automation/.n8n/
+
+# OS & editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+
+# Backend build outputs
+fincapp-backend/bin/
+fincapp-backend/obj/
+fincapp-backend/*.user
+
+# Frontend build outputs
+fincapp-frontend/**/node_modules/
+fincapp-frontend/**/.next/
+fincapp-frontend/**/dist/
+fincapp-frontend/**/build/
+
+# Logs
+*.log
+logs/
