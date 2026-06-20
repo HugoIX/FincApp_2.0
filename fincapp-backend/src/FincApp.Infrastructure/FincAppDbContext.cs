@@ -21,6 +21,9 @@ public class FincAppDbContext : DbContext
     public DbSet<Farm> Farms => Set<Farm>();
     public DbSet<FarmAssignment> FarmAssignments => Set<FarmAssignment>();
     public DbSet<ProductionModule> ProductionModules => Set<ProductionModule>();
+    public DbSet<Animal> Animals => Set<Animal>();
+    public DbSet<WeightLog> WeightLogs => Set<WeightLog>();
+    public DbSet<HealthRecord> HealthRecords => Set<HealthRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -105,6 +108,68 @@ public class FincAppDbContext : DbContext
 
             entity.HasQueryFilter(e => _tenantProvider.TenantId != null && e.FarmId == _tenantProvider.TenantId.Value);
         });
+
+        modelBuilder.Entity<Animal>(entity =>
+        {
+            entity.ToTable("animals");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.FarmId).HasColumnName("farm_id").IsRequired();
+            entity.Property(e => e.Type).HasColumnName("type").HasColumnType("production_type").IsRequired();
+            entity.Property(e => e.IdentificationTag).HasColumnName("identification_tag").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.BirthDate).HasColumnName("birth_date");
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(50).HasDefaultValue("healthy").IsRequired();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
+
+            entity.HasOne(e => e.Farm)
+                .WithMany()
+                .HasForeignKey(e => e.FarmId)
+                .HasConstraintName("fk_animal_farm")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.FarmId, e.IdentificationTag }).IsUnique().HasDatabaseName("uq_farm_animal_tag");
+            entity.HasIndex(e => e.FarmId).HasDatabaseName("idx_animals_farm");
+
+            entity.HasQueryFilter(e => _tenantProvider.TenantId != null && e.FarmId == _tenantProvider.TenantId.Value);
+        });
+
+        modelBuilder.Entity<WeightLog>(entity =>
+        {
+            entity.ToTable("weight_logs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.AnimalId).HasColumnName("animal_id").IsRequired();
+            entity.Property(e => e.WeightKg).HasColumnName("weight_kg").HasColumnType("numeric(6,2)").IsRequired();
+            entity.Property(e => e.LogDate).HasColumnName("log_date").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
+
+            entity.HasOne(e => e.Animal)
+                .WithMany(a => a.WeightLogs)
+                .HasForeignKey(e => e.AnimalId)
+                .HasConstraintName("fk_weight_animal")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.AnimalId).HasDatabaseName("idx_weight_animal");
+        });
+
+        modelBuilder.Entity<HealthRecord>(entity =>
+        {
+            entity.ToTable("health_records");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.AnimalId).HasColumnName("animal_id").IsRequired();
+            entity.Property(e => e.SymptomsDescription).HasColumnName("symptoms_description").IsRequired();
+            entity.Property(e => e.Diagnosis).HasColumnName("diagnosis").HasMaxLength(150);
+            entity.Property(e => e.TreatmentAdministered).HasColumnName("treatment_administered").HasMaxLength(255);
+            entity.Property(e => e.RecordedAt).HasColumnName("recorded_at").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
+
+            entity.HasOne(e => e.Animal)
+                .WithMany(a => a.HealthRecords)
+                .HasForeignKey(e => e.AnimalId)
+                .HasConstraintName("fk_health_animal")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.AnimalId).HasDatabaseName("idx_health_animal");
+        });
     }
 
     public override int SaveChanges()
@@ -135,6 +200,10 @@ public class FincAppDbContext : DbContext
                 else if (entry.Entity is FarmAssignment assignment && assignment.FarmId == Guid.Empty)
                 {
                     assignment.FarmId = tenantId.Value;
+                }
+                else if (entry.Entity is Animal animal && animal.FarmId == Guid.Empty)
+                {
+                    animal.FarmId = tenantId.Value;
                 }
             }
         }
