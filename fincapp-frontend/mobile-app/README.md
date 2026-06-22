@@ -1,23 +1,43 @@
-# FincApp Base - Java + SQLite
+# FincApp Mobile - US-01-JUANCARLOS
 
-Base mínima para la historia US-01-JUANCARLOS.
+Base Android en Java para la historia:
 
-## Incluye
+**US-01-JUANCARLOS | Mobile APK Scaffolding, SQLite Offline Schema & Accessible Layout Base**
 
-- Proyecto Android en Java.
-- Pantalla Home con botones grandes para Cattle, Swine y Poultry.
-- SQLite local usando SQLiteOpenHelper.
+## Qué incluye
+
+- APK Android base en Java.
+- Pantalla Home accesible con botones grandes basados en íconos para:
+  - Cattle
+  - Swine
+  - Poultry
+- Selector de finca activa.
+- SQLite local inicializada en el primer arranque.
+- Funcionamiento sin internet / modo avión.
 - Tablas locales:
-  - local_users
-  - local_farms
-  - local_production_modules
-  - sync_queue
-- Cada selección de módulo se guarda localmente con sync_status = pending.
+  - `local_users`
+  - `local_farms`
+  - `local_production_modules`
+  - `sync_queue`
+- Cambios de entidad guardados localmente con `sync_status = 'pending'`.
+- Cada selección de módulo crea registro en `local_production_modules` y en `sync_queue`.
 
-## Cómo abrir
+## Cómo ejecutar
 
-1. Android Studio > Open.
-2. Selecciona la carpeta FincAppBase.
-3. Espera la sincronización de Gradle.
-4. Ejecuta en emulador o dispositivo.
-5. Prueba en modo avión.
+Abrir esta carpeta en Android Studio:
+
+```text
+fincapp-frontend/mobile-app
+```
+
+Luego ejecutar el módulo `app` en emulador o celular físico.
+
+## Prueba de aceptación sugerida
+
+1. Activar modo avión.
+2. Abrir la app.
+3. Verificar que no se cierra.
+4. Seleccionar una finca activa.
+5. Presionar Cattle, Swine o Poultry.
+6. Confirmar que aparece mensaje `sync_status = pending`.
+
