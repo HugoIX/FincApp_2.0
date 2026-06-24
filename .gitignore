@@ -27,3 +27,10 @@ fincapp-frontend/**/build/
 # Logs
 *.log
 logs/
+SAOT31_CHANGELOG.md
+.gradle/
+.idea/
+local.properties
+build/
+app/build/
+*.iml

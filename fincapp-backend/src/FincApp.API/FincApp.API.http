@@ -1,0 +1,6 @@
+@FincApp.API_HostAddress = http://localhost:5211
+
+GET {{FincApp.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
