@@ -1,0 +1,114 @@
+{
+  "name": "LLMPromptRouter",
+  "meta": {
+    "description": "US-01-JUANPABLO — Receives a normalized farm sync payload, builds a type-specific prompt, calls the configured LLM (OpenAI by default), and returns a structured JSON response token."
+  },
+  "nodes": [
+    {
+      "id": "llm-trigger-01",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "llm-code-02",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nconst d = p.normalized_data;\nconst model = $env.OPENAI_MODEL || 'gpt-4o-mini';\n\nlet systemPrompt, userPrompt;\n\nif (p.production_type === 'cattle') {\n  systemPrompt = 'You are FincApp\\'s agricultural AI analyst specializing in cattle production for Colombian and Latin American livestock operations. Respond ONLY with valid JSON — no markdown, no explanation.';\n  userPrompt = `Analyze this cattle farm sync report and return a structured risk and recommendation assessment.\n\nFarm ID: ${p.farm_id}\nOwner ID: ${p.owner_id}\nSync Timestamp: ${p.sync_timestamp}\n\nProduction Data:\n- Head count: ${d.head_count}\n- Average weight: ${d.average_weight_kg} kg\n- Pregnant animals: ${d.pregnancy_count}\n- Feeding efficiency: ${d.feeding_efficiency_pct !== null ? d.feeding_efficiency_pct + '%' : 'N/A'}\n- Active health alerts: ${d.health_alert_count}\n- Alert details: ${JSON.stringify(d.health_alerts)}\n\nReturn a JSON object with this exact structure:\n{\n  \"risk_level\": \"low | medium | high\",\n  \"summary\": \"<one sentence operational summary>\",\n  \"recommendations\": [\"<action 1>\", \"<action 2>\"],\n  \"predicted_yield_kg\": <number or null>,\n  \"alerts_requiring_action\": [\"<alert description>\"]\n}`;\n\n} else if (p.production_type === 'swine') {\n  systemPrompt = 'You are FincApp\\'s agricultural AI analyst specializing in swine (porcine) production for Colombian and Latin American operations. Respond ONLY with valid JSON — no markdown, no explanation.';\n  userPrompt = `Analyze this swine farm sync report and return a structured risk and recommendation assessment.\n\nFarm ID: ${p.farm_id}\nOwner ID: ${p.owner_id}\nSync Timestamp: ${p.sync_timestamp}\n\nProduction Data:\n- Head count: ${d.head_count}\n- Average weight: ${d.average_weight_kg} kg\n- Animals in gestation: ${d.gestation_count}\n- Mortality rate: ${d.mortality_rate_pct !== null ? d.mortality_rate_pct + '%' : 'N/A'}\n- Feed conversion ratio: ${d.feed_conversion_ratio !== null ? d.feed_conversion_ratio : 'N/A'}\n- Active health alerts: ${d.health_alert_count}\n- Alert details: ${JSON.stringify(d.health_alerts)}\n\nReturn a JSON object with this exact structure:\n{\n  \"risk_level\": \"low | medium | high\",\n  \"summary\": \"<one sentence operational summary>\",\n  \"recommendations\": [\"<action 1>\", \"<action 2>\"],\n  \"predicted_yield_kg\": <number or null>,\n  \"alerts_requiring_action\": [\"<alert description>\"]\n}`;\n\n} else {\n  systemPrompt = 'You are FincApp\\'s agricultural AI analyst specializing in poultry (avícola) production for Colombian and Latin American operations. Respond ONLY with valid JSON — no markdown, no explanation.';\n  userPrompt = `Analyze this poultry farm sync report and return a structured risk and recommendation assessment.\n\nFarm ID: ${p.farm_id}\nOwner ID: ${p.owner_id}\nSync Timestamp: ${p.sync_timestamp}\n\nProduction Data:\n- Flock size: ${d.flock_size} birds\n- Average weight: ${d.average_weight_kg} kg\n- Egg production: ${d.egg_production_count} units\n- Mortality rate: ${d.mortality_rate_pct !== null ? d.mortality_rate_pct + '%' : 'N/A'}\n- Feed conversion ratio: ${d.feed_conversion_ratio !== null ? d.feed_conversion_ratio : 'N/A'}\n- Active health alerts: ${d.health_alert_count}\n- Alert details: ${JSON.stringify(d.health_alerts)}\n\nReturn a JSON object with this exact structure:\n{\n  \"risk_level\": \"low | medium | high\",\n  \"summary\": \"<one sentence operational summary>\",\n  \"recommendations\": [\"<action 1>\", \"<action 2>\"],\n  \"predicted_yield_kg\": <number or null>,\n  \"alerts_requiring_action\": [\"<alert description>\"]\n}`;\n}\n\nreturn [{\n  json: {\n    ...p,\n    llm_request_body: {\n      model,\n      response_format: { type: 'json_object' },\n      temperature: 0.2,\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user',   content: userPrompt }\n      ]\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "llm-http-03",
+      "name": "Call LLM API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [720, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.OPENAI_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.llm_request_body) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "llm-code-04",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst upstream = $('Build Prompt').first().json;\n\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('LLM returned no choices — check OPENAI_API_KEY and OPENAI_MODEL env vars');\n}\n\nlet analysis;\ntry {\n  analysis = JSON.parse(response.choices[0].message.content);\n} catch (e) {\n  throw new Error(`LLM response is not valid JSON: ${response.choices[0].message.content}`);\n}\n\nconst required = ['risk_level', 'summary', 'recommendations', 'alerts_requiring_action'];\nfor (const field of required) {\n  if (!(field in analysis)) {\n    throw new Error(`LLM response missing expected field: '${field}'`);\n  }\n}\n\nconst validRisk = ['low', 'medium', 'high'];\nif (!validRisk.includes(analysis.risk_level)) {\n  throw new Error(`LLM returned invalid risk_level: '${analysis.risk_level}'`);\n}\n\nreturn [{\n  json: {\n    owner_id: upstream.owner_id,\n    farm_id: upstream.farm_id,\n    production_type: upstream.production_type,\n    sync_timestamp: upstream.sync_timestamp,\n    analysis,\n    llm_model: response.model,\n    tokens_used: response.usage?.total_tokens ?? null\n  }\n}];"
+      }
+    },
+    {
+      "id": "llm-set-05",
+      "name": "Format Response Token",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1200, 300],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            { "id": "resp-01", "name": "response_token.status",                  "value": "success",                               "type": "string" },
+            { "id": "resp-02", "name": "response_token.owner_id",                "value": "={{ $json.owner_id }}",                  "type": "string" },
+            { "id": "resp-03", "name": "response_token.farm_id",                 "value": "={{ $json.farm_id }}",                   "type": "string" },
+            { "id": "resp-04", "name": "response_token.production_type",         "value": "={{ $json.production_type }}",           "type": "string" },
+            { "id": "resp-05", "name": "response_token.risk_level",              "value": "={{ $json.analysis.risk_level }}",       "type": "string" },
+            { "id": "resp-06", "name": "response_token.summary",                 "value": "={{ $json.analysis.summary }}",          "type": "string" },
+            { "id": "resp-07", "name": "response_token.recommendations",         "value": "={{ $json.analysis.recommendations }}",  "type": "array"  },
+            { "id": "resp-08", "name": "response_token.alerts_requiring_action", "value": "={{ $json.analysis.alerts_requiring_action }}", "type": "array" },
+            { "id": "resp-09", "name": "response_token.predicted_yield_kg",      "value": "={{ $json.analysis.predicted_yield_kg ?? null }}", "type": "number" },
+            { "id": "resp-10", "name": "response_token.processed_at",            "value": "={{ new Date().toISOString() }}",        "type": "string" },
+            { "id": "resp-11", "name": "response_token.llm_model",               "value": "={{ $json.llm_model }}",                "type": "string" },
+            { "id": "resp-12", "name": "response_token.tokens_used",             "value": "={{ $json.tokens_used }}",              "type": "number" }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [{ "node": "Build Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [{ "node": "Call LLM API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call LLM API": {
+      "main": [
+        [{ "node": "Parse LLM Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [{ "node": "Format Response Token", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}
