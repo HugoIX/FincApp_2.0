@@ -1,7 +1,8 @@
-SAOT31_CHANGELOG.md
 .gradle/
 .idea/
 local.properties
 build/
 app/build/
+captures/
 *.iml
+.DS_Store
