@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#071B2D">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="FincApp 2.0"
+            android:textColor="#70E45D"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:text="AURA"
+            android:textColor="#FFFFFF"
+            android:textSize="44sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Agente Inteligente de Operaciones Agropecuarias"
+            android:textColor="#C8E8FF"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/txtAuraOrb"
+            android:layout_width="112dp"
+            android:layout_height="112dp"
+            android:layout_gravity="center"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/aura_orb_bg"
+            android:gravity="center"
+            android:text="AI"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtAuraStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:text="AURA está en reposo · toca el botón para iniciar"
+            android:textColor="#C8E8FF"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btnAwakenAura"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="22dp"
+            android:background="@drawable/aura_button_bg"
+            android:text="Despertar AURA"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtAuraConversation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:background="@drawable/aura_card_bg"
+            android:minHeight="96dp"
+            android:padding="18dp"
+            android:text="Presiona Despertar AURA. La respuesta del agente será por voz."
+            android:textColor="@color/text_dark"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnVoiceQuestion"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/aura_button_bg"
+            android:text="🎙 Preguntar por voz"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="19sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/edtAuraQuestion"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="18dp"
+            android:background="#FFFFFF"
+            android:hint="O escribe: ¿Quién eres?"
+            android:inputType="text"
+            android:padding="14dp"
+            android:textColor="@color/text_dark"
+            android:textColorHint="#607D8B"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnAskAura"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/module_button_bg"
+            android:text="Enviar pregunta escrita"
+            android:textAllCaps="false"
+            android:textColor="@color/text_dark"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/btnWhoAreYou"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/module_button_bg"
+                android:text="Demo: ¿Quién eres?"
+                android:textAllCaps="false"
+                android:textColor="@color/text_dark" />
+
+            <Button
+                android:id="@+id/btnOffline"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/module_button_bg"
+                android:text="Demo: ¿Puedes trabajar sin internet?"
+                android:textAllCaps="false"
+                android:textColor="@color/text_dark" />
+
+            <Button
+                android:id="@+id/btnRegister"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/module_button_bg"
+                android:text="Demo: Registrar animal"
+                android:textAllCaps="false"
+                android:textColor="@color/text_dark" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

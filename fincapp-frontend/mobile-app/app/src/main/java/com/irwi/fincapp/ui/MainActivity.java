@@ -2,6 +2,7 @@ package com.irwi.fincapp.ui;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.content.Intent;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
@@ -34,12 +35,15 @@ public class MainActivity extends Activity {
         spinnerFarms = findViewById(R.id.spinnerFarms);
         txtStatus = findViewById(R.id.txtStatus);
 
+        Button btnWakeAura = findViewById(R.id.btnWakeAura);
         Button btnCattle = findViewById(R.id.btnCattle);
         Button btnSwine = findViewById(R.id.btnSwine);
         Button btnPoultry = findViewById(R.id.btnPoultry);
 
         loadActiveFarms();
         updateStatus("SQLite local DB initialized. Pending sync items: " + moduleRepository.getPendingSyncCount());
+
+        btnWakeAura.setOnClickListener(v -> startActivity(new Intent(this, AuraActivity.class)));
 
         btnCattle.setOnClickListener(v -> saveModuleOffline("Cattle"));
         btnSwine.setOnClickListener(v -> saveModuleOffline("Swine"));

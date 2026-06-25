@@ -28,6 +28,28 @@
             android:textColor="@color/text_dark"
             android:textSize="15sp" />
 
+
+        <Button
+            android:id="@+id/btnWakeAura"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="22dp"
+            android:background="@drawable/aura_button_bg"
+            android:text="✨  Despertar AURA"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="21sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="AURA introduces itself and becomes the main assistant experience."
+            android:textColor="@color/text_dark"
+            android:textSize="14sp" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
