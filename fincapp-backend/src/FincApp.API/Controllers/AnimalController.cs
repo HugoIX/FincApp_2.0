@@ -120,4 +120,32 @@ public class AnimalController : ControllerBase
 
         return StatusCode(201, new { message = "Health record added successfully." });
     }
+
+    [HttpPut("animals/{id}")]
+    public async Task<IActionResult> UpdateAnimal(Guid id, [FromBody] CreateAnimalDto dto)
+    {
+        var animal = await _context.Animals.FirstOrDefaultAsync(a => a.Id == id);
+        if (animal == null) return NotFound();
+
+        animal.Type = dto.Type;
+        animal.IdentificationTag = dto.IdentificationTag;
+        animal.BirthDate = dto.BirthDate;
+        animal.Status = dto.Status;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(animal);
+    }
+
+    [HttpDelete("animals/{id}")]
+    public async Task<IActionResult> DeleteAnimal(Guid id)
+    {
+        var animal = await _context.Animals.FirstOrDefaultAsync(a => a.Id == id);
+        if (animal == null) return NotFound();
+
+        _context.Animals.Remove(animal);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
 }
