@@ -24,6 +24,7 @@ public class FincAppDbContext : DbContext
     public DbSet<Animal> Animals => Set<Animal>();
     public DbSet<WeightLog> WeightLogs => Set<WeightLog>();
     public DbSet<HealthRecord> HealthRecords => Set<HealthRecord>();
+    public DbSet<SyncTelemetryLog> SyncTelemetryLogs => Set<SyncTelemetryLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -170,6 +171,34 @@ public class FincAppDbContext : DbContext
 
             entity.HasIndex(e => e.AnimalId).HasDatabaseName("idx_health_animal");
         });
+
+        modelBuilder.Entity<SyncTelemetryLog>(entity =>
+        {
+            entity.ToTable("sync_telemetry_logs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.DeviceUuid).HasColumnName("device_uuid").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.UserId).HasColumnName("user_id").IsRequired();
+            entity.Property(e => e.FarmId).HasColumnName("farm_id").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
+            entity.Property(e => e.RowsSynced).HasColumnName("rows_synced").HasDefaultValue(0).IsRequired();
+            entity.Property(e => e.ErrorMessage).HasColumnName("error_message");
+            entity.Property(e => e.SynchronizedAt).HasColumnName("synchronized_at").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .HasConstraintName("fk_sync_user")
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Farm)
+                .WithMany()
+                .HasForeignKey(e => e.FarmId)
+                .HasConstraintName("fk_sync_farm")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.FarmId).HasDatabaseName("idx_sync_telemetry_farm");
+        });
     }
 
     public override int SaveChanges()
@@ -204,6 +233,10 @@ public class FincAppDbContext : DbContext
                 else if (entry.Entity is Animal animal && animal.FarmId == Guid.Empty)
                 {
                     animal.FarmId = tenantId.Value;
+                }
+                else if (entry.Entity is SyncTelemetryLog log && log.FarmId == Guid.Empty)
+                {
+                    log.FarmId = tenantId.Value;
                 }
             }
         }
