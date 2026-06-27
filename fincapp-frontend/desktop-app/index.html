@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FincApp 2.0 — Powered by AURA. Offline-first livestock operations and administrator dashboard.">
+    <title>FincApp 2.0 | Powered by AURA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="bg-[var(--bg-main)] text-[var(--text-primary)] font-sans transition-colors duration-300">
+
+    <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4">
+        <!-- Rendered by src/js/auth.js -->
+    </div>
+
+    <div id="app-shell" class="hidden min-h-screen flex">
+        <aside id="sidebar" class="sidebar fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-transform duration-300">
+            <div class="p-6 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-[var(--accent)] rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
+                        <i class="fas fa-leaf text-white text-sm"></i>
+                    </div>
+                    <div>
+                        <span class="text-xl font-bold text-white font-display leading-none block">FincApp 2.0</span>
+                        <span class="text-[10px] text-white/45 uppercase tracking-widest font-black">Powered by AURA</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+                <button onclick="navigateTo('dashboard')" data-view="dashboard" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-chart-pie w-5 text-center"></i> Admin Dashboard
+                </button>
+                <button onclick="navigateTo('inventory')" data-view="inventory" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-cow w-5 text-center"></i> Livestock Inventory
+                </button>
+                <button onclick="navigateTo('health')" data-view="health" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-heart-pulse w-5 text-center"></i> Health Alerts
+                </button>
+                <button onclick="navigateTo('activities')" data-view="activities" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-clipboard-list w-5 text-center"></i> Farm Tasks
+                </button>
+                <button onclick="navigateTo('weights')" data-view="weights" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-weight-scale w-5 text-center"></i> Weight Performance
+                </button>
+                <button onclick="navigateTo('reports')" data-view="reports" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-file-chart-column w-5 text-center"></i> Smart Reports
+                </button>
+
+                <div id="admin-section" class="hidden">
+                    <div class="pt-4 pb-2 px-4">
+                        <p class="text-[10px] font-black text-white/30 uppercase tracking-widest">Administration</p>
+                    </div>
+                    <button onclick="navigateTo('admin')" data-view="admin" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                        <i class="fas fa-shield-halved w-5 text-center"></i> Admin Panel
+                    </button>
+                </div>
+
+                <div class="pt-4 pb-2 px-4">
+                    <p class="text-[10px] font-black text-white/30 uppercase tracking-widest">General</p>
+                </div>
+                <button onclick="navigateTo('settings')" data-view="settings" class="nav-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fas fa-gear w-5 text-center"></i> Settings
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-white/10">
+                <div class="flex items-center gap-3 p-3 rounded-xl hover:bg-white/10 cursor-pointer transition">
+                    <div class="w-8 h-8 bg-[var(--accent)] rounded-full flex items-center justify-center text-white font-bold text-sm" id="user-avatar">U</div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white text-sm font-semibold truncate" id="user-name-sidebar">Loading...</p>
+                        <p class="text-white/40 text-[10px] uppercase font-bold" id="user-role-sidebar">Role</p>
+                    </div>
+                    <button onclick="logout()" class="text-white/40 hover:text-red-400 transition" title="Logout">
+                        <i class="fas fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <div class="flex-1 flex flex-col ml-64 transition-all duration-300" id="main-wrapper">
+            <header class="sticky top-0 z-30 bg-[var(--bg-main)]/80 backdrop-blur-md border-b border-[var(--border-color)] px-6 py-3 flex items-center justify-between">
+                <button id="menu-toggle" class="lg:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                    <i class="fas fa-bars text-lg"></i>
+                </button>
+
+                <div>
+                    <h1 class="text-base font-bold text-[var(--text-primary)]" id="page-title">Dashboard</h1>
+                    <p class="text-[10px] text-[var(--text-secondary)] uppercase font-black tracking-widest">AURA administrator console</p>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <div id="sync-status" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold">
+                        <div id="sync-dot" class="w-2 h-2 rounded-full"></div>
+                        <span id="sync-text">CHECKING...</span>
+                    </div>
+
+                    <div id="offline-badge" class="hidden items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold cursor-pointer" onclick="navigateTo('settings')">
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span id="offline-count">0</span> pending
+                    </div>
+
+                    <button id="theme-toggle-btn" onclick="toggleTheme()" class="w-9 h-9 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] transition">
+                        <i class="fas fa-moon" id="theme-icon"></i>
+                    </button>
+                </div>
+            </header>
+
+            <main id="app-content" class="flex-1 p-6 overflow-auto"></main>
+        </div>
+    </div>
+
+    <button id="voice-fab" class="hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white rounded-full shadow-2xl shadow-green-500/30 flex items-center justify-center transition-all duration-200 active:scale-90" onclick="toggleVoice()" title="Ask AURA">
+        <i class="fas fa-microphone text-lg" id="voice-fab-icon"></i>
+    </button>
+
+    <div id="toast-container" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-none"></div>
+
+    <div id="global-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
+        <div id="modal-content-wrapper" class="bg-[var(--bg-card)] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-modal-in"></div>
+    </div>
+
+    <script type="module" src="src/js/app.js"></script>
+</body>
+</html>
