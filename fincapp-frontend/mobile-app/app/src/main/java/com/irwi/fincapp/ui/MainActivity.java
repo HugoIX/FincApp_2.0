@@ -14,6 +14,7 @@ import com.irwi.fincapp.models.Animal;
 import com.irwi.fincapp.models.HealthRecord;
 import com.irwi.fincapp.models.WeightLog;
 import com.irwi.fincapp.repository.AssetRepository;
+import com.irwi.fincapp.sync.SyncScheduler;
 
 import java.util.List;
 
@@ -27,6 +28,9 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         repository = new AssetRepository(this);
+        SyncScheduler.schedulePeriodicSync(this);
+        SyncScheduler.scheduleOneTimeSync(this);
+        SyncScheduler.registerConnectivityCallback(this);
         root = findViewById(R.id.rootContainer);
         renderHome();
     }
@@ -34,8 +38,8 @@ public class MainActivity extends Activity {
     private void renderHome() {
         root.removeAllViews();
         title("🐄 FincApp - Offline Asset Management", 26);
-        subtitle("US-02: Register animals, append weights and log health symptoms without internet.");
-        subtitle("Pending sync queue: " + repository.pendingSyncCount());
+        subtitle("US-03: Offline CRUD + automatic background sync orchestration.");
+        subtitle("Pending sync queue: " + repository.pendingSyncCount() + " | WorkManager auto-sync enabled");
 
         section("1. New animal registration");
         farmCloudIdInput = input("Farm cloud id (optional, e.g. farm-001)", InputType.TYPE_CLASS_TEXT);
@@ -55,8 +59,9 @@ public class MainActivity extends Activity {
         treatmentInput = input("Treatment administered (optional)", InputType.TYPE_CLASS_TEXT);
         actionButton("🩺 APPEND HEALTH RECORD", v -> appendHealth());
 
-        section("3. Local offline animals");
+        section("3. Local offline animals and background sync");
         actionButton("🔄 REFRESH LOCAL LIST", v -> renderHome());
+        actionButton("📡 SCHEDULE BACKGROUND SYNC TEST", v -> { SyncScheduler.scheduleOneTimeSync(this); toast("Background sync scheduled. Check Logcat tag: FincAppSync"); });
         renderAnimalList();
     }
 

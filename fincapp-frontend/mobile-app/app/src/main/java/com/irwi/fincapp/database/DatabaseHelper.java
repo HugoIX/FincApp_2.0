@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import com.irwi.fincapp.models.Animal;
 import com.irwi.fincapp.models.HealthRecord;
 import com.irwi.fincapp.models.WeightLog;
+import com.irwi.fincapp.models.SyncQueueItem;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -196,6 +197,51 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         try { while (c.moveToNext()) records.add(new HealthRecord(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5))); }
         finally { c.close(); }
         return records;
+    }
+
+
+    public List<SyncQueueItem> getPendingSyncQueueItems() {
+        List<SyncQueueItem> items = new ArrayList<>();
+        Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id, entity_name, operation_type, entity_id, payload_summary, sync_status, created_at " +
+                        "FROM sync_queue WHERE sync_status='pending' ORDER BY id ASC", null);
+        try {
+            while (c.moveToNext()) {
+                items.add(new SyncQueueItem(
+                        c.getLong(0), c.getString(1), c.getString(2), c.getLong(3),
+                        c.getString(4), c.getString(5), c.getString(6)));
+            }
+        } finally { c.close(); }
+        return items;
+    }
+
+    public void markQueueItemsAsSynced(List<SyncQueueItem> items) {
+        if (items == null || items.isEmpty()) return;
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            ContentValues queueValues = new ContentValues();
+            queueValues.put("sync_status", "synced");
+            for (SyncQueueItem item : items) {
+                db.update("sync_queue", queueValues, "id=?", new String[]{String.valueOf(item.id)});
+                markEntityAsSyncedInsideTransaction(db, item.entityName, item.entityId);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
+    private void markEntityAsSyncedInsideTransaction(SQLiteDatabase db, String entityName, long entityId) {
+        if (!"animals".equals(entityName) && !"weight_logs".equals(entityName) && !"health_records".equals(entityName)) {
+            return;
+        }
+        ContentValues values = new ContentValues();
+        values.put("sync_status", "synced");
+        db.update(entityName, values, "id=?", new String[]{String.valueOf(entityId)});
+    }
+
+    public void markQueueItemsPendingAfterFailure(List<SyncQueueItem> items) {
+        // Keep rows as pending. This method exists for readability and Logcat traceability in the sync layer.
+        // WorkManager handles the retry using exponential backoff.
     }
 
     public int pendingSyncCount() {

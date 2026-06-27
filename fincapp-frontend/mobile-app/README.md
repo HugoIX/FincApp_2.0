@@ -1,91 +1,99 @@
-# FincApp Mobile - US-02 Complete Base
+# FincApp Mobile - US-03 Complete
 
-Android Java + SQLite implementation for:
+Android Java project for **US-03-JUANCARLOS | Background Sync Orchestration & SQLite Bulk-Queue Dispatcher**.
 
-**US-02-JUAN CARLOS | Offline Local CRUD Persistence & High-Accessibility Asset Management Layout**
+## Includes
 
-## What this delivers
+- Java + Android SDK.
+- SQLite local persistence inherited from US-02.
+- Offline tables aligned with the SQLite ↔ Cloud contract:
+  - `animals`
+  - `weight_logs`
+  - `health_records`
+  - `sync_queue`
+- `sync_status = 'pending'` when data is created offline.
+- `sync_status = 'synced'` after successful background dispatch.
+- Jetpack WorkManager in Java.
+- WorkManager network constraint: runs only with network connectivity.
+- Exponential backoff retry strategy.
+- ConnectivityManager network callback.
+- Network broadcast receiver as an additional trigger.
+- Retrofit 2 interface prepared for the real API.
+- Temporary mock API dispatch with Logcat output until Sergio's backend endpoint is available.
 
-- Java / Android SDK project.
-- SQLite local persistence using `SQLiteOpenHelper`.
-- MVC-style separation: `ui`, `repository`, `database`, `models`.
-- High-accessibility mobile layout:
-  - high contrast,
-  - heavy typography,
-  - large inputs and buttons,
-  - touch targets >= 48dp.
-- Offline CRUD for livestock assets:
-  - create animal,
-  - list/read local animals,
-  - update animal status,
-  - delete local animal.
-- Offline historical appending:
-  - append weight logs,
-  - append health symptom records.
-- Local timestamps using device locale.
-- `sync_queue` entries generated for future cloud sync.
-- `sync_status = 'pending'` stored for offline-created records.
+## Main packages
 
-## SQLite tables aligned with US-09 contract
+```text
+com.irwi.fincapp
+├── database
+│   └── DatabaseHelper.java
+├── models
+│   ├── Animal.java
+│   ├── HealthRecord.java
+│   ├── SyncQueueItem.java
+│   └── WeightLog.java
+├── network
+│   ├── ApiClient.java
+│   └── SyncApiService.java
+├── repository
+│   ├── AssetRepository.java
+│   └── SyncRepository.java
+├── sync
+│   ├── NetworkChangeReceiver.java
+│   ├── SyncScheduler.java
+│   └── SyncWorker.java
+└── ui
+    └── MainActivity.java
+```
 
-This project uses the table/column names shared by the US-09 SQLite ↔ Cloud contract:
+## How to test US-03
 
-### animals
+1. Run the app in Android Studio.
+2. Enable Airplane Mode.
+3. Create animals, weights, and health records.
+4. Disable Airplane Mode or connect to Wi-Fi.
+5. Open Logcat and filter by:
 
-`id, cloud_id, farm_cloud_id, type, identification_tag, birth_date, status, created_at`
+```text
+FincAppSync
+```
 
-Additional local sync column for US-02:
+Expected logs:
 
-`sync_status`
+```text
+ConnectivityManager detected network availability. Scheduling background sync.
+SyncWorker started in background.
+Pending queue rows found: X
+MOCK API MODE: simulating bulk sync to Sergio's API.
+Background sync completed. Rows marked as synced: X
+```
 
-### weight_logs
+## Replacing mock mode with real API
 
-`id, cloud_id, animal_id, animal_cloud_id, weight_kg, log_date`
+Open:
 
-Additional local sync column for US-02:
+```text
+app/src/main/java/com/irwi/fincapp/network/ApiClient.java
+```
 
-`sync_status`
+Change:
 
-### health_records
+```java
+apiClient = new ApiClient(true);
+```
 
-`id, cloud_id, animal_id, animal_cloud_id, symptoms_description, diagnosis, treatment_administered, recorded_at`
+or update the constructor usage in `SyncRepository` after the real API is available.
 
-Additional local sync column for US-02:
+Then replace the placeholder `BASE_URL` and implement the Retrofit payload inside `dispatchPendingRows`.
 
-`sync_status`
+## Git note
 
-### sync_queue
+Do not commit generated folders:
 
-Tracks pending local changes for future cloud synchronization.
-
-## Acceptance Criteria mapping
-
-### Successful Offline Asset Persistence
-
-The app initializes SQLite on first boot. New animals are inserted directly into the local `animals` table, receive a local auto-increment `id`, and are marked `sync_status = 'pending'`.
-
-### High-Accessibility UI Form Validation
-
-The UI uses large buttons, bold text, high contrast colors, and big form controls. Required fields are validated before saving.
-
-### Historical Log Appending to Local Time-Series
-
-Existing animals can receive weight logs and health records. New rows are appended to `weight_logs` and `health_records` with localized timestamps.
-
-## How to run
-
-Open this folder in Android Studio:
-
-`fincapp-frontend/mobile-app`
-
-Then run the `app` configuration on an emulator or physical Android device.
-
-## Git notes
-
-Do not commit generated files:
-
-- `.gradle/`
-- `.idea/`
-- `local.properties`
-- `build/`
-- `app/build/`
+```text
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+```
