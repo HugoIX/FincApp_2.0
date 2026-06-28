@@ -60,7 +60,7 @@ This can later be replaced by:
 - KPI cards show current values using demo synchronized data.
 - Farm selector filters data by selected farm.
 - Health alerts are highlighted.
-- Empty state is available through the “Finca Demo Empty State” option.
+- Empty state is available through the “Demo Empty State Farm” option.
 - Visual identity follows FincApp colors: blue, green, and white.
 
 ## Suggested Branch

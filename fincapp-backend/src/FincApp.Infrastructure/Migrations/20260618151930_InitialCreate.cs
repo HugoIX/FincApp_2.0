@@ -11,6 +11,26 @@ namespace FincApp.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+                        CREATE TYPE user_role AS ENUM ('admin', 'worker');
+                    END IF;
+                END
+                $$;
+            """);
+
+            migrationBuilder.Sql("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'production_type') THEN
+                        CREATE TYPE production_type AS ENUM ('cattle', 'swine', 'poultry');
+                    END IF;
+                END
+                $$;
+            """);
+
             migrationBuilder.AlterDatabase()
                 .Annotation("Npgsql:Enum:production_type.production_type", "cattle,swine,poultry")
                 .Annotation("Npgsql:Enum:user_role.user_role", "admin,worker");
@@ -22,7 +42,7 @@ namespace FincApp.Infrastructure.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
                     email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     password_hash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    role = table.Column<int>(type: "user_role", nullable: false, defaultValue: 1),
+                    role = table.Column<string>(type: "user_role", nullable: false, defaultValueSql: "'worker'::user_role"),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
@@ -141,6 +161,9 @@ namespace FincApp.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "users");
+
+            migrationBuilder.Sql("DROP TYPE IF EXISTS production_type;");
+            migrationBuilder.Sql("DROP TYPE IF EXISTS user_role;");
         }
     }
 }

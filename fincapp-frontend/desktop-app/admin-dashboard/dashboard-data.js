@@ -2,7 +2,7 @@ window.FINCAAPP_DASHBOARD_DATA = {
   farms: [
     {
       id: "farm-el-roble",
-      name: "Finca El Roble",
+      name: "Oak Farm",
       location: "Antioquia, Colombia",
       lastSync: "2026-06-27 09:45",
       pendingSync: 3,
@@ -38,7 +38,7 @@ window.FINCAAPP_DASHBOARD_DATA = {
     },
     {
       id: "farm-la-esperanza",
-      name: "Finca La Esperanza",
+      name: "Hope Farm",
       location: "Córdoba, Colombia",
       lastSync: "2026-06-27 08:20",
       pendingSync: 0,
@@ -69,7 +69,7 @@ window.FINCAAPP_DASHBOARD_DATA = {
     },
     {
       id: "farm-empty-demo",
-      name: "Finca Demo Empty State",
+      name: "Demo Empty State Farm",
       location: "No synchronized data",
       lastSync: "--",
       pendingSync: 0,

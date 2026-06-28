@@ -130,7 +130,7 @@ public class AuraActivity extends Activity implements TextToSpeech.OnInitListene
 
         textToSpeech.stop();
         animateOrb();
-        txtAuraStatus.setText("Escuchando... habla ahora");
+        txtAuraStatus.setText("Listening... speak now");
         setAuraVisualState("Estoy escuchando. Hazle una pregunta a AURA.");
 
         Intent recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);

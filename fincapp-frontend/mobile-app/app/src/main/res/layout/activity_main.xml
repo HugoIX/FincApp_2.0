@@ -35,7 +35,7 @@
             android:layout_height="72dp"
             android:layout_marginTop="22dp"
             android:background="@drawable/aura_button_bg"
-            android:text="✨  Despertar AURA"
+            android:text="✨  Wake AURA"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
             android:textSize="21sp"

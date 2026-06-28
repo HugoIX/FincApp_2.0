@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AURA presenta FincApp</title>
+  <link rel="stylesheet" href="./src/css/aura-presentation.css" />
+</head>
+<body>
+  <main class="presentation">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <div>
+          <strong>FincApp</strong>
+          <small>AURA-assisted presentation</small>
+        </div>
+      </div>
+
+      <nav class="actions">
+        <button id="wakeBtn" class="btn primary">Wake AURA</button>
+        <button id="nextBtn" class="btn" disabled>Next</button>
+      </nav>
+    </header>
+
+    <section class="main-stage">
+      <aside class="aura-side">
+        <div id="auraOrb" class="aura-orb">
+          <span>AURA</span>
+        </div>
+
+        <div class="aura-status">
+          <p id="auraState">AURA lista</p>
+          <h1 id="sceneTitle">FincApp</h1>
+          <span id="sceneStep">Farm management system</span>
+        </div>
+      </aside>
+
+      <section class="content-side">
+        <div class="module-header">
+          <p id="moduleLabel">Overview</p>
+          <h2 id="moduleTitle">Smart farm management</h2>
+        </div>
+
+        <div class="product-view">
+          <aside class="module-menu">
+            <button class="menu-item active" data-module="dashboard">Dashboard</button>
+            <button class="menu-item" data-module="animals">Animals</button>
+            <button class="menu-item" data-module="weights">Weights</button>
+            <button class="menu-item" data-module="health">Health</button>
+            <button class="menu-item" data-module="reports">Reports</button>
+            <button class="menu-item" data-module="sync">Synchronization</button>
+          </aside>
+
+          <section class="module-preview">
+            <article class="hero-card">
+              <p id="cardTag">Purpose</p>
+              <h3 id="cardTitle">A farm with clearer data</h3>
+              <p id="cardText">
+                FincApp organizes farm operations data so animals, weight records, health records and reports can be managed from one system.
+              </p>
+            </article>
+
+            <div id="metricGrid" class="metric-grid"></div>
+            <div id="featureGrid" class="feature-grid"></div>
+          </section>
+        </div>
+      </section>
+    </section>
+
+  </main>
+
+  <script type="module" src="./src/js/aura-presentation.js"></script>
+</body>
+</html>

@@ -13,6 +13,22 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FincAppLocalDevCors", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:8080",
+                "http://127.0.0.1:8080",
+                "http://localhost:5500",
+                "http://127.0.0.1:5500"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, TenantProvider>();
@@ -24,7 +40,11 @@ dataSourceBuilder.MapEnum<ProductionType>("production_type");
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<FincAppDbContext>(options =>
-    options.UseNpgsql(dataSource));
+    options.UseNpgsql(dataSource, npgsqlOptions =>
+    {
+        npgsqlOptions.MapEnum<UserRole>("user_role");
+        npgsqlOptions.MapEnum<ProductionType>("production_type");
+    }));
 
 var app = builder.Build();
 
@@ -49,6 +69,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("FincAppLocalDevCors");
+
 app.UseAuthorization();
 app.MapControllers();
 

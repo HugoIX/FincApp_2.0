@@ -34,3 +34,18 @@ local.properties
 build/
 app/build/
 *.iml
+
+# Local environment files
+.env
+*.env
+
+# Node dependencies
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Frontend local cache
+fincapp-frontend/desktop-app/.env
+fincapp-backend-node/.env

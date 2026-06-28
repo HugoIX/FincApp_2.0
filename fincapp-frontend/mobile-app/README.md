@@ -32,7 +32,7 @@ fincapp-frontend/mobile-app
 
 Luego ejecutar el módulo `app` en emulador o celular físico.
 
-## Prueba de aceptación sugerida
+## Suggested acceptance test
 
 1. Activar modo avión.
 2. Abrir la app.
