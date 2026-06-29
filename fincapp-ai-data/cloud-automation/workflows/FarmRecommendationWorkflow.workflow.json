@@ -1,0 +1,168 @@
+{
+  "name": "FarmRecommendationWorkflow",
+  "meta": {
+    "description": "US-17-JUANPABLO — Receives farm metrics via POST webhook, generates a short operational recommendation via DeepSeek LLM, and returns safe actionable insights. Includes no-data detection and API fallback response."
+  },
+  "nodes": [
+    {
+      "id": "frw-wh-01",
+      "name": "Recommendation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "farm/recommendation",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "frw-code-02",
+      "name": "Extract Farm Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body ?? raw;\n\nconst metrics = {\n  production_type:  body.production_type  ?? null,\n  total_animals:    body.total_animals    ?? null,\n  active_alerts:    body.active_alerts    ?? 0,\n  sync_count:       body.sync_count       ?? 0,\n  last_sync:        body.last_sync        ?? null,\n  critical_records: body.critical_records ?? 0\n};\n\nconst has_data = !!(metrics.production_type && metrics.total_animals !== null);\n\nreturn [{ json: { ...metrics, has_data } }];"
+      }
+    },
+    {
+      "id": "frw-if-03",
+      "name": "Has Farm Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-has-data",
+              "leftValue": "={{ $json.has_data.toString() }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "frw-code-04",
+      "name": "Build Recommendation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 180],
+      "parameters": {
+        "jsCode": "const m = $input.first().json;\nconst model = $env.DEEPSEEK_MODEL || 'deepseek-chat';\n\nconst systemPrompt = 'You are AURA, FincApp\\'s farm operations assistant. Generate short, safe, and actionable recommendations from farm metrics. You are NOT a veterinarian and must never replace professional veterinary advice. Always include a safety disclaimer when health risks are detected. Respond ONLY with valid JSON in English.';\n\nconst userPrompt = 'Farm metrics summary:\\n- Production type: ' + m.production_type + '\\n- Total animals: ' + m.total_animals + '\\n- Active health alerts: ' + m.active_alerts + '\\n- Recent sync sessions: ' + m.sync_count + '\\n- Last sync: ' + (m.last_sync || 'never') + '\\n- High/critical health records in last 7 days: ' + m.critical_records + '\\n\\nGenerate a farm recommendation. Return JSON with: recommendation (one actionable sentence), priority (low/medium/high), category (health/inventory/operations/sync), safe_wording (include if health risk exists, else null), requires_vet (bool).';\n\nreturn [{ json: { ...m, llm_model: model, prompt_system: systemPrompt, prompt_user: userPrompt } }];"
+      }
+    },
+    {
+      "id": "frw-http-05",
+      "name": "Call Recommendation LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 180],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.DEEPSEEK_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.llm_model, response_format: { type: 'json_object' }, temperature: 0.3, messages: [{ role: 'system', content: $json.prompt_system }, { role: 'user', content: $json.prompt_user }] } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "frw-code-06",
+      "name": "Parse Recommendation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 180],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\n\nconst fallback = {\n  recommendation: 'Keep monitoring your animals daily and ensure all health events are logged. Regular records help AURA detect patterns early.',\n  priority: 'medium',\n  category: 'operations',\n  safe_wording: 'If you observe any unusual symptoms, consult a licensed veterinarian promptly.',\n  requires_vet: false,\n  source: 'api_fallback'\n};\n\nif (!response.choices || response.choices.length === 0) {\n  return [{ json: fallback }];\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(response.choices[0].message.content);\n} catch (e) {\n  return [{ json: fallback }];\n}\n\nconst validPriorities = ['low', 'medium', 'high'];\nif (!parsed.recommendation || !validPriorities.includes(parsed.priority)) {\n  return [{ json: fallback }];\n}\n\nreturn [{ json: { ...parsed, source: 'llm' } }];"
+      }
+    },
+    {
+      "id": "frw-respond-07",
+      "name": "Respond with Recommendation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1680, 180],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "frw-respond-08",
+      "name": "Respond No Data",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [960, 420],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { recommendation: 'No farm records found yet. Start by registering your animals and logging health events so AURA can generate meaningful insights.', priority: 'low', category: 'operations', safe_wording: null, requires_vet: false, source: 'no_data_fallback' } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Recommendation Webhook": {
+      "main": [[{ "node": "Extract Farm Metrics",          "type": "main", "index": 0 }]]
+    },
+    "Extract Farm Metrics": {
+      "main": [[{ "node": "Has Farm Data",                 "type": "main", "index": 0 }]]
+    },
+    "Has Farm Data": {
+      "main": [
+        [{ "node": "Build Recommendation Prompt",          "type": "main", "index": 0 }],
+        [{ "node": "Respond No Data",                      "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Recommendation Prompt": {
+      "main": [[{ "node": "Call Recommendation LLM",       "type": "main", "index": 0 }]]
+    },
+    "Call Recommendation LLM": {
+      "main": [[{ "node": "Parse Recommendation",          "type": "main", "index": 0 }]]
+    },
+    "Parse Recommendation": {
+      "main": [[{ "node": "Respond with Recommendation",   "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}

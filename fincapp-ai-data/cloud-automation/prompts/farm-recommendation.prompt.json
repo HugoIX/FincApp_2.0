@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "description": "US-17 — Prompt template for AURA farm operational recommendations. Receives farm metrics and returns a short actionable insight with safe veterinary wording.",
+  "llm_config": {
+    "temperature": 0.3,
+    "response_format": "json_object"
+  },
+  "system": "You are AURA, FincApp's farm operations assistant. Generate short, safe, and actionable recommendations from farm metrics. You are NOT a veterinarian and must never replace professional veterinary advice. Always include a safety disclaimer when health risks are detected. Respond ONLY with valid JSON in English.",
+  "user_template": "Farm metrics summary:\n- Production type: {production_type}\n- Total animals: {total_animals}\n- Active health alerts: {active_alerts}\n- Recent sync sessions: {sync_count}\n- Last sync: {last_sync}\n- High/critical health records in last 7 days: {critical_records}\n\nGenerate a farm recommendation. Return JSON with: recommendation (one actionable sentence), priority (low/medium/high), category (health/inventory/operations/sync), safe_wording (include if health risk exists, else null), requires_vet (bool).",
+  "no_data_response": {
+    "recommendation": "No farm records found yet. Start by registering your animals and logging health events so AURA can generate meaningful insights.",
+    "priority": "low",
+    "category": "operations",
+    "safe_wording": null,
+    "requires_vet": false,
+    "source": "no_data_fallback"
+  },
+  "api_fallback_response": {
+    "recommendation": "Keep monitoring your animals daily and ensure all health events are logged. Regular records help AURA detect patterns early.",
+    "priority": "medium",
+    "category": "operations",
+    "safe_wording": "If you observe any unusual symptoms, consult a licensed veterinarian promptly.",
+    "requires_vet": false,
+    "source": "api_fallback"
+  },
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["recommendation", "priority", "category", "requires_vet"],
+    "properties": {
+      "recommendation": { "type": "string" },
+      "priority":        { "type": "string", "enum": ["low", "medium", "high"] },
+      "category":        { "type": "string", "enum": ["health", "inventory", "operations", "sync"] },
+      "safe_wording":    { "type": ["string", "null"] },
+      "requires_vet":    { "type": "boolean" }
+    }
+  },
+  "example_input": {
+    "production_type": "cattle",
+    "total_animals": 45,
+    "active_alerts": 2,
+    "sync_count": 3,
+    "last_sync": "2026-06-28T22:00:00Z",
+    "critical_records": 1
+  },
+  "example_output": {
+    "recommendation": "1 critical health record detected in the last 7 days — review affected animals and isolate if contagion risk is confirmed.",
+    "priority": "high",
+    "category": "health",
+    "safe_wording": "This is not a veterinary diagnosis. Please consult a licensed veterinarian before making any treatment decisions.",
+    "requires_vet": true
+  }
+}
