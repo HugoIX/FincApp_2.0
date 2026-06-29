@@ -1,43 +1,48 @@
-# FincApp Mobile - US-01-JUANCARLOS
+# FincApp Mobile Final
 
-Base Android en Java para la historia:
+Cliente Android nativo en Java para FincApp.
 
-**US-01-JUANCARLOS | Mobile APK Scaffolding, SQLite Offline Schema & Accessible Layout Base**
+## Flujo incluido
 
-## Qué incluye
+1. Splash / presentación
+2. Login demo o login básico
+3. Selección de finca
+4. Home con módulos Cattle, Swine, Poultry y AURA
+5. CRUD offline de animales
+6. Registro offline de pesos y salud
+7. SQLite local con `sync_status = pending/synced`
+8. WorkManager para sincronización automática
+9. Retrofit preparado para backend .NET
+10. Pantalla de Settings para cambiar URL del backend sin mostrarla en el Home
 
-- APK Android base en Java.
-- Pantalla Home accesible con botones grandes basados en íconos para:
-  - Cattle
-  - Swine
-  - Poultry
-- Selector de finca activa.
-- SQLite local inicializada en el primer arranque.
-- Funcionamiento sin internet / modo avión.
-- Tablas locales:
-  - `local_users`
-  - `local_farms`
-  - `local_production_modules`
-  - `sync_queue`
-- Cambios de entidad guardados localmente con `sync_status = 'pending'`.
-- Cada selección de módulo crea registro en `local_production_modules` y en `sync_queue`.
+## URL del backend
 
-## Cómo ejecutar
+Para emulador Android:
 
-Abrir esta carpeta en Android Studio:
+```text
+http://10.0.2.2:5211/api/
+```
+
+Para celular físico:
+
+```text
+http://IP_DE_TU_PC:5211/api/
+```
+
+Cuando el backend esté en VPS:
+
+```text
+https://TU_DOMINIO_O_IP/api/
+```
+
+## Importante
+
+No incluir API keys en Android. Gemini, ElevenLabs y Supabase deben quedarse solo en backend.
+
+## Abrir
+
+Abrir exactamente esta carpeta en Android Studio:
 
 ```text
 fincapp-frontend/mobile-app
 ```
-
-Luego ejecutar el módulo `app` en emulador o celular físico.
-
-## Suggested acceptance test
-
-1. Activar modo avión.
-2. Abrir la app.
-3. Verificar que no se cierra.
-4. Seleccionar una finca activa.
-5. Presionar Cattle, Swine o Poultry.
-6. Confirmar que aparece mensaje `sync_status = pending`.
-

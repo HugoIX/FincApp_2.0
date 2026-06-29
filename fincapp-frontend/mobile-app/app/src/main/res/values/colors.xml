@@ -1,6 +1,7 @@
 <resources>
-    <color name="green_primary">#2E7D32</color>
-    <color name="green_dark">#1B5E20</color>
-    <color name="green_light">#E8F5E9</color>
-    <color name="text_dark">#263238</color>
+    <color name="primary">#1B5E20</color>
+    <color name="primary_dark">#0B3D16</color>
+    <color name="accent">#FFC107</color>
+    <color name="bg">#F4F7F2</color>
+    <color name="text">#102015</color>
 </resources>

@@ -1,17 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <application
-        android:allowBackup="true"
-        android:icon="@drawable/ic_launcher_foreground"
-        android:label="@string/app_name"
-        android:theme="@style/AppTheme">
-        <activity
-            android:name=".ui.AuraActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".ui.MainActivity"
-            android:exported="true">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application android:theme="@style/AppTheme" android:label="FincApp" android:usesCleartextTraffic="true" android:allowBackup="true" android:supportsRtl="true">
+        <activity android:name=".ui.SettingsActivity" />
+        <activity android:name=".ui.AuraActivity" />
+        <activity android:name=".ui.AnimalActivity" />
+        <activity android:name=".ui.HomeActivity" />
+        <activity android:name=".ui.FarmActivity" />
+        <activity android:name=".ui.LoginActivity" />
+        <activity android:name=".ui.SplashActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
