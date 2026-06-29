@@ -1,0 +1,135 @@
+{
+  "name": "LexiconDeltaCompiler",
+  "meta": {
+    "description": "US-04-JUANPABLO — Runs daily, fetches recent health_records symptom descriptions, extracts and categorizes veterinary terms via DeepSeek LLM, and uploads the validated lexicon delta JSON to Supabase Storage (lexicon-updates/latest.json)."
+  },
+  "nodes": [
+    {
+      "id": "lex-schedule-01",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 24 }]
+        }
+      }
+    },
+    {
+      "id": "lex-http-02",
+      "name": "Fetch Recent Symptoms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/health_records' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,symptoms_description,recorded_at" },
+            { "name": "order",  "value": "recorded_at.desc" },
+            { "name": "limit",  "value": "50" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "lex-code-03",
+      "name": "Build Categorization Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const rawInput = $input.all();\nconst records = rawInput.length === 1 && Array.isArray(rawInput[0].json)\n  ? rawInput[0].json\n  : rawInput.map(item => item.json);\nconst model = $env.DEEPSEEK_MODEL || 'deepseek-chat';\n\nconst symptoms = records.filter(r => r.symptoms_description).map(r => r.symptoms_description);\nif (symptoms.length === 0) {\n  throw new Error('No symptom descriptions found in health_records');\n}\n\nconst symptomsText = symptoms.join(' | ');\n\nconst systemPrompt = 'You are FincApp\\'s agricultural NLP specialist for Colombian and Latin American livestock operations. Extract veterinary and agricultural terms from symptom descriptions and categorize them. Return ONLY valid JSON in English.';\n\nconst userPrompt = 'Extract all unique veterinary and agricultural terms from these symptom descriptions: ' + symptomsText + '. Return a JSON object with a terms array. Each element must have: term (original text), normalized (lowercase no accents), category (one of: disease/symptom/treatment/vital_sign/anatomy/farm_slang), language (es or en), production_types (array with applicable values from: cattle/swine/poultry), confidence (0.0 to 1.0).';\n\nreturn [{\n  json: {\n    record_count: symptoms.length,\n    llm_model: model,\n    prompt_system: systemPrompt,\n    prompt_user: userPrompt,\n    compiled_at: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "lex-http-04",
+      "name": "Call Categorization LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [960, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.DEEPSEEK_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.llm_model, response_format: { type: 'json_object' }, temperature: 0.1, messages: [{ role: 'system', content: $json.prompt_system }, { role: 'user', content: $json.prompt_user }] } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "lex-code-05",
+      "name": "Parse Lexicon Delta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst upstream = $('Build Categorization Prompt').first().json;\n\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('LLM returned no choices — check DEEPSEEK_API_KEY env var');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(response.choices[0].message.content);\n} catch (e) {\n  throw new Error('LLM response is not valid JSON: ' + response.choices[0].message.content);\n}\n\nconst terms = Array.isArray(parsed) ? parsed : (parsed.terms ?? []);\nif (terms.length === 0) {\n  throw new Error('LLM returned empty terms array');\n}\n\nconst validCategories = ['disease', 'symptom', 'treatment', 'vital_sign', 'anatomy', 'farm_slang'];\nconst validatedTerms = terms.filter(t => t.term && t.category && validCategories.includes(t.category));\n\nconst delta = {\n  version: upstream.compiled_at,\n  source: 'fincapp-cloud-ai',\n  record_count: upstream.record_count,\n  term_count: validatedTerms.length,\n  terms: validatedTerms\n};\n\nreturn [{\n  json: {\n    delta_string: JSON.stringify(delta),\n    term_count: validatedTerms.length,\n    version: upstream.compiled_at\n  }\n}];"
+      }
+    },
+    {
+      "id": "lex-http-06",
+      "name": "Upload to Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL + '/storage/v1/object/lexicon-updates/latest.json' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "x-upsert",      "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.delta_string }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [[{ "node": "Fetch Recent Symptoms",      "type": "main", "index": 0 }]]
+    },
+    "Fetch Recent Symptoms": {
+      "main": [[{ "node": "Build Categorization Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Categorization Prompt": {
+      "main": [[{ "node": "Call Categorization LLM",    "type": "main", "index": 0 }]]
+    },
+    "Call Categorization LLM": {
+      "main": [[{ "node": "Parse Lexicon Delta",         "type": "main", "index": 0 }]]
+    },
+    "Parse Lexicon Delta": {
+      "main": [[{ "node": "Upload to Supabase Storage",  "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}

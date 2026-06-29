@@ -1,0 +1,79 @@
+{
+  "name": "LexiconDeliveryEndpoint",
+  "meta": {
+    "description": "US-04-JUANPABLO — Exposes a GET webhook that mobile devices call to retrieve the latest NLP lexicon delta JSON from Supabase Storage (lexicon-updates/latest.json). Zero-downtime: always returns the last compiled delta without blocking active sessions."
+  },
+  "nodes": [
+    {
+      "id": "led-wh-01",
+      "name": "Lexicon Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "lexicon/latest",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "led-http-02",
+      "name": "Fetch Latest Delta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/storage/v1/object/public/lexicon-updates/latest.json' }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "led-code-03",
+      "name": "Parse Delta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst keys = Object.keys(raw);\nif (keys.length === 1 && raw[keys[0]] === '') {\n  return [{ json: JSON.parse(keys[0]) }];\n}\nreturn [{ json: raw }];"
+      }
+    },
+    {
+      "id": "led-respond-04",
+      "name": "Respond with Delta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [960, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Cache-Control", "value": "max-age=3600" }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Lexicon Request Webhook": {
+      "main": [[{ "node": "Fetch Latest Delta", "type": "main", "index": 0 }]]
+    },
+    "Fetch Latest Delta": {
+      "main": [[{ "node": "Parse Delta",        "type": "main", "index": 0 }]]
+    },
+    "Parse Delta": {
+      "main": [[{ "node": "Respond with Delta", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}

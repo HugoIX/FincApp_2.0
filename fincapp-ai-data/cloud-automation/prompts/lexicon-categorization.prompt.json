@@ -1,0 +1,43 @@
+{
+  "production_type": "all",
+  "version": "1.0",
+  "description": "US-04 lexicon delta compilation — extracts and categorizes veterinary and agricultural terms from health_records symptom descriptions for NLP model updates",
+  "llm_config": {
+    "temperature": 0.1,
+    "response_format": "json_object"
+  },
+  "system": "You are FincApp's agricultural NLP specialist for Colombian and Latin American livestock operations. Extract veterinary and agricultural terms from symptom descriptions and categorize them. Return ONLY valid JSON in English.",
+  "user_template": "Extract all unique veterinary and agricultural terms from these symptom descriptions: {symptoms_text}. Return a JSON object with a terms array. Each element must have: term (original text), normalized (lowercase no accents), category (one of: disease/symptom/treatment/vital_sign/anatomy/farm_slang), language (es or en), production_types (array with applicable values from: cattle/swine/poultry), confidence (0.0 to 1.0).",
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["terms"],
+    "properties": {
+      "terms": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["term", "normalized", "category", "language", "production_types", "confidence"],
+          "properties": {
+            "term":             { "type": "string" },
+            "normalized":       { "type": "string" },
+            "category":         { "type": "string", "enum": ["disease", "symptom", "treatment", "vital_sign", "anatomy", "farm_slang"] },
+            "language":         { "type": "string", "enum": ["es", "en"] },
+            "production_types": { "type": "array", "items": { "type": "string", "enum": ["cattle", "swine", "poultry"] } },
+            "confidence":       { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          }
+        }
+      }
+    }
+  },
+  "example_input": {
+    "symptoms_text": "Excessive salivation, blisters on tongue and hooves, high fever 40.5C | Mild lameness in rear left leg, eating normally, no fever"
+  },
+  "example_output": {
+    "terms": [
+      { "term": "excessive salivation", "normalized": "excessive salivation", "category": "symptom", "language": "en", "production_types": ["cattle", "swine"], "confidence": 0.97 },
+      { "term": "blisters", "normalized": "blisters", "category": "symptom", "language": "en", "production_types": ["cattle", "swine"], "confidence": 0.95 },
+      { "term": "high fever", "normalized": "high fever", "category": "vital_sign", "language": "en", "production_types": ["cattle", "swine", "poultry"], "confidence": 0.99 },
+      { "term": "lameness", "normalized": "lameness", "category": "symptom", "language": "en", "production_types": ["cattle"], "confidence": 0.92 }
+    ]
+  }
+}
