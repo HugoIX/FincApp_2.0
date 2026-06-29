@@ -1,0 +1,45 @@
+{
+  "production_type": "swine",
+  "version": "1.0",
+  "llm_config": {
+    "temperature": 0.2,
+    "response_format": "json_object"
+  },
+  "system": "You are FincApp's agricultural AI analyst specializing in swine (porcine) production for Colombian and Latin American operations. Respond ONLY with valid JSON — no markdown, no explanation.",
+  "user_template": "Analyze this swine farm sync report and return a structured risk and recommendation assessment.\n\nFarm ID: {farm_id}\nOwner ID: {owner_id}\nSync Timestamp: {sync_timestamp}\n\nProduction Data:\n- Head count: {head_count}\n- Average weight: {average_weight_kg} kg\n- Animals in gestation: {gestation_count}\n- Mortality rate: {mortality_rate_pct}%\n- Feed conversion ratio: {feed_conversion_ratio}\n- Active health alerts: {health_alert_count}\n- Alert details: {health_alerts}\n\nReturn a JSON object with this exact structure:\n{\n  \"risk_level\": \"low | medium | high\",\n  \"summary\": \"<one sentence operational summary>\",\n  \"recommendations\": [\"<action 1>\", \"<action 2>\"],\n  \"predicted_yield_kg\": <number or null>,\n  \"alerts_requiring_action\": [\"<alert description>\"]\n}",
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["risk_level", "summary", "recommendations", "alerts_requiring_action"],
+    "properties": {
+      "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+      "summary": { "type": "string" },
+      "recommendations": { "type": "array", "items": { "type": "string" } },
+      "predicted_yield_kg": { "type": ["number", "null"] },
+      "alerts_requiring_action": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "example_input": {
+    "farm_id": "uuid-farm",
+    "owner_id": "uuid-owner",
+    "sync_timestamp": "2026-06-18T08:00:00Z",
+    "head_count": 500,
+    "average_weight_kg": 85,
+    "gestation_count": 60,
+    "mortality_rate_pct": 1.2,
+    "feed_conversion_ratio": 2.8,
+    "health_alert_count": 1,
+    "health_alerts": ["Pen 3B showing signs of respiratory disease — 5 animals affected"]
+  },
+  "example_output": {
+    "risk_level": "medium",
+    "summary": "Swine production is stable with an elevated FCR and a localized respiratory outbreak in pen 3B requiring immediate containment.",
+    "recommendations": [
+      "Quarantine pen 3B and consult veterinarian for PRRS or influenza diagnosis.",
+      "Review feed formulation to reduce FCR from 2.8 toward target of 2.4."
+    ],
+    "predicted_yield_kg": 42500,
+    "alerts_requiring_action": [
+      "Possible respiratory outbreak in pen 3B — 5 animals affected, risk of spread"
+    ]
+  }
+}

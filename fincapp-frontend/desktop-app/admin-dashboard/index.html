@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FincApp 2.0 | Administrator Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="dashboard-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">F</div>
+        <div>
+          <p class="eyebrow">FincApp 2.0</p>
+          <h1>Admin Dashboard</h1>
+        </div>
+      </div>
+
+      <section class="farm-selector-card">
+        <label for="farmSelector">Active farm</label>
+        <select id="farmSelector"></select>
+        <small>Data source: demo dataset. Ready to replace with API or Supabase views.</small>
+      </section>
+
+      <section class="aura-panel">
+        <p class="eyebrow">AURA Insight</p>
+        <h2 id="auraTitle">Operational summary</h2>
+        <p id="auraInsight">
+          Select a farm to review livestock performance and health status.
+        </p>
+      </section>
+
+      <section class="demo-script">
+        <p class="eyebrow">Demo flow</p>
+        <ol>
+          <li>Awaken AURA on the APK.</li>
+          <li>Register animal data offline.</li>
+          <li>Synchronize pending records.</li>
+          <li>Refresh this dashboard.</li>
+        </ol>
+      </section>
+    </aside>
+
+    <section class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Synchronized livestock overview</p>
+          <h2 id="farmTitle">Farm dashboard</h2>
+          <p id="farmSubtitle">Current KPIs by selected farm.</p>
+        </div>
+        <div class="sync-status">
+          <span class="status-dot"></span>
+          <div>
+            <strong id="syncLabel">Synced</strong>
+            <small id="lastSync">Last sync: --</small>
+          </div>
+        </div>
+      </header>
+
+      <section id="emptyState" class="empty-state hidden">
+        <h3>No synchronized livestock data yet</h3>
+        <p>
+          This farm has no synchronized records. Register data through AURA in the Android APK,
+          then synchronize to populate the dashboard.
+        </p>
+      </section>
+
+      <section id="dashboardContent">
+        <section class="kpi-grid">
+          <article class="kpi-card">
+            <span>Total animals</span>
+            <strong id="totalAnimals">0</strong>
+            <small>Active livestock inventory</small>
+          </article>
+
+          <article class="kpi-card">
+            <span>Average weight</span>
+            <strong id="averageWeight">0 kg</strong>
+            <small>Across latest available logs</small>
+          </article>
+
+          <article class="kpi-card alert-card">
+            <span>Health alerts</span>
+            <strong id="healthAlerts">0</strong>
+            <small id="healthAlertText">No active alerts</small>
+          </article>
+
+          <article class="kpi-card">
+            <span>Pending sync</span>
+            <strong id="pendingSync">0</strong>
+            <small>Local records awaiting upload</small>
+          </article>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Production lines</p>
+                <h3>Animals by type</h3>
+              </div>
+            </div>
+            <div id="animalBars" class="bar-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Weight tracking</p>
+                <h3>Latest weight trend</h3>
+              </div>
+            </div>
+            <div id="weightTrend" class="trend-chart"></div>
+          </article>
+
+          <article class="panel wide">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Health monitoring</p>
+                <h3>Active health alerts</h3>
+              </div>
+            </div>
+            <div id="alertsList" class="table-like"></div>
+          </article>
+
+          <article class="panel wide">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Synchronization telemetry</p>
+                <h3>Recent activity</h3>
+              </div>
+            </div>
+            <div id="activityList" class="table-like"></div>
+          </article>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="./dashboard-data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
