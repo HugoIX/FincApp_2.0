@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="FincApp.API/FincApp.API.csproj" />
+  <Project Path="FincApp.Core/FincApp.Core.csproj" />
+  <Project Path="FincApp.Infrastructure/FincApp.Infrastructure.csproj" />
+</Solution>

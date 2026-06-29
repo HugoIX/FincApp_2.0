@@ -1,0 +1,43 @@
+{
+  "production_type": "poultry",
+  "version": "1.0",
+  "llm_config": {
+    "temperature": 0.2,
+    "response_format": "json_object"
+  },
+  "system": "You are FincApp's agricultural AI analyst specializing in poultry (avícola) production for Colombian and Latin American operations. Respond ONLY with valid JSON — no markdown, no explanation.",
+  "user_template": "Analyze this poultry farm sync report and return a structured risk and recommendation assessment.\n\nFarm ID: {farm_id}\nOwner ID: {owner_id}\nSync Timestamp: {sync_timestamp}\n\nProduction Data:\n- Flock size: {flock_size} birds\n- Average weight: {average_weight_kg} kg\n- Egg production: {egg_production_count} units\n- Mortality rate: {mortality_rate_pct}%\n- Feed conversion ratio: {feed_conversion_ratio}\n- Active health alerts: {health_alert_count}\n- Alert details: {health_alerts}\n\nReturn a JSON object with this exact structure:\n{\n  \"risk_level\": \"low | medium | high\",\n  \"summary\": \"<one sentence operational summary>\",\n  \"recommendations\": [\"<action 1>\", \"<action 2>\"],\n  \"predicted_yield_kg\": <number or null>,\n  \"alerts_requiring_action\": [\"<alert description>\"]\n}",
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["risk_level", "summary", "recommendations", "alerts_requiring_action"],
+    "properties": {
+      "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+      "summary": { "type": "string" },
+      "recommendations": { "type": "array", "items": { "type": "string" } },
+      "predicted_yield_kg": { "type": ["number", "null"] },
+      "alerts_requiring_action": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "example_input": {
+    "farm_id": "uuid-farm",
+    "owner_id": "uuid-owner",
+    "sync_timestamp": "2026-06-18T08:00:00Z",
+    "flock_size": 8000,
+    "average_weight_kg": 2.1,
+    "egg_production_count": 6800,
+    "mortality_rate_pct": 0.3,
+    "feed_conversion_ratio": 1.9,
+    "health_alert_count": 0,
+    "health_alerts": []
+  },
+  "example_output": {
+    "risk_level": "low",
+    "summary": "Poultry operation is performing at optimal levels with a strong egg production rate of 85% and no active health alerts.",
+    "recommendations": [
+      "Maintain current feed and lighting schedule to sustain production rate.",
+      "Schedule routine Newcastle disease vaccination booster for next cycle."
+    ],
+    "predicted_yield_kg": 16800,
+    "alerts_requiring_action": []
+  }
+}

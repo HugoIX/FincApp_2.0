@@ -1,0 +1,45 @@
+{
+  "production_type": "cattle",
+  "version": "1.0",
+  "llm_config": {
+    "temperature": 0.2,
+    "response_format": "json_object"
+  },
+  "system": "You are FincApp's agricultural AI analyst specializing in cattle production for Colombian and Latin American livestock operations. Respond ONLY with valid JSON — no markdown, no explanation.",
+  "user_template": "Analyze this cattle farm sync report and return a structured risk and recommendation assessment.\n\nFarm ID: {farm_id}\nOwner ID: {owner_id}\nSync Timestamp: {sync_timestamp}\n\nProduction Data:\n- Head count: {head_count}\n- Average weight: {average_weight_kg} kg\n- Pregnant animals: {pregnancy_count}\n- Feeding efficiency: {feeding_efficiency_pct}%\n- Active health alerts: {health_alert_count}\n- Alert details: {health_alerts}\n\nReturn a JSON object with this exact structure:\n{\n  \"risk_level\": \"low | medium | high\",\n  \"summary\": \"<one sentence operational summary>\",\n  \"recommendations\": [\"<action 1>\", \"<action 2>\"],\n  \"predicted_yield_kg\": <number or null>,\n  \"alerts_requiring_action\": [\"<alert description>\"]\n}",
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["risk_level", "summary", "recommendations", "alerts_requiring_action"],
+    "properties": {
+      "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+      "summary": { "type": "string" },
+      "recommendations": { "type": "array", "items": { "type": "string" } },
+      "predicted_yield_kg": { "type": ["number", "null"] },
+      "alerts_requiring_action": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "example_input": {
+    "farm_id": "uuid-farm",
+    "owner_id": "uuid-owner",
+    "sync_timestamp": "2026-06-18T08:00:00Z",
+    "head_count": 250,
+    "average_weight_kg": 380,
+    "pregnancy_count": 40,
+    "feeding_efficiency_pct": 82,
+    "health_alert_count": 2,
+    "health_alerts": ["Animal #47 showing respiratory symptoms", "Pasture block C water shortage"]
+  },
+  "example_output": {
+    "risk_level": "medium",
+    "summary": "Herd is healthy overall but two active health alerts require veterinary attention within 24 hours.",
+    "recommendations": [
+      "Isolate animal #47 and schedule veterinary evaluation for respiratory symptoms.",
+      "Restore water access to pasture block C immediately to avoid dehydration stress."
+    ],
+    "predicted_yield_kg": 95000,
+    "alerts_requiring_action": [
+      "Respiratory symptoms in animal #47 — possible BRD risk",
+      "Water shortage in pasture block C"
+    ]
+  }
+}
