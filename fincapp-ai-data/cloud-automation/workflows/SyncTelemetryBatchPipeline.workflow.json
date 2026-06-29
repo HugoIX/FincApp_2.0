@@ -1,0 +1,228 @@
+{
+  "name": "SyncTelemetryBatchPipeline",
+  "meta": {
+    "description": "US-03-JUANPABLO — Polls sync_telemetry every minute for unprocessed success records, fetches the associated health_records batch, classifies all records in a single DeepSeek LLM call, and triggers analytical view refresh via Supabase RPC."
+  },
+  "nodes": [
+    {
+      "id": "stb-schedule-01",
+      "name": "Poll Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 1 }]
+        }
+      }
+    },
+    {
+      "id": "stb-http-02",
+      "name": "Poll Unprocessed Records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/sync_telemetry' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status",        "value": "eq.success" },
+            { "name": "n8n_processed", "value": "eq.false" },
+            { "name": "select",        "value": "*" },
+            { "name": "limit",         "value": "1" },
+            { "name": "order",         "value": "synced_at.asc" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "stb-code-03",
+      "name": "Extract Sync Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst records = Array.isArray(raw) ? raw : [raw];\n\nif (records.length === 0 || !records[0].sync_session_id) {\n  return [];\n}\n\nconst record = records[0];\nreturn [{\n  json: {\n    telemetry_id: record.id,\n    sync_session_id: record.sync_session_id,\n    farm_id: record.farm_id,\n    owner_id: record.owner_id,\n    production_type: record.production_type,\n    record_count: record.record_count ?? null,\n    synced_at: record.synced_at ?? new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "stb-http-04",
+      "name": "Mark As Processed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [960, 300],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/sync_telemetry' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=minimal" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "={{ 'eq.' + $json.telemetry_id }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { n8n_processed: true } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "stb-http-05",
+      "name": "Fetch Health Records Batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/health_records' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "sync_session_id", "value": "={{ 'eq.' + $('Extract Sync Session').first().json.sync_session_id }}" },
+            { "name": "select",          "value": "id,animal_id,symptoms_description,recorded_at" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "stb-code-06",
+      "name": "Build Batch LLM Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300],
+      "parameters": {
+        "jsCode": "const rawInput = $input.all();\nconst records = rawInput.length === 1 && Array.isArray(rawInput[0].json)\n  ? rawInput[0].json\n  : rawInput.map(item => item.json);\nconst session = $('Extract Sync Session').first().json;\nconst model = $env.DEEPSEEK_MODEL || 'deepseek-chat';\n\nif (records.length === 0) {\n  throw new Error('No health records found for sync_session_id: ' + session.sync_session_id);\n}\n\nconst recordsBlock = records.map((r, i) =>\n  (i + 1) + '. Record ID: ' + r.id + ' | Animal: ' + (r.animal_id || 'N/A') + ' | Symptoms: ' + r.symptoms_description\n).join(' || ');\n\nconst systemPrompt = 'You are FincApp\\'s veterinary AI analyst for Colombian and Latin American livestock. Analyze batches of health records and return structured JSON in English only. Respond ONLY with a valid JSON object.';\n\nconst userPrompt = 'Batch of ' + records.length + ' records from a ' + session.production_type + ' farm. Farm: ' + session.farm_id + '. Records: ' + recordsBlock + '. Return JSON object with results array. Each element: record_id, severity (low/medium/high/critical), summary, contagion_risk (bool), immediate_action_required (bool).';\n\nreturn [{\n  json: {\n    sync_session_id: session.sync_session_id,\n    farm_id: session.farm_id,\n    owner_id: session.owner_id,\n    production_type: session.production_type,\n    record_count: records.length,\n    llm_model: model,\n    prompt_system: systemPrompt,\n    prompt_user: userPrompt\n  }\n}];"
+      }
+    },
+    {
+      "id": "stb-http-07",
+      "name": "Call Batch LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.DEEPSEEK_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.llm_model, response_format: { type: 'json_object' }, temperature: 0.1, messages: [{ role: 'system', content: $json.prompt_system }, { role: 'user', content: $json.prompt_user }] } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "stb-code-08",
+      "name": "Parse Batch Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 300],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst upstream = $('Build Batch LLM Prompt').first().json;\n\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('LLM returned no choices — check DEEPSEEK_API_KEY env var');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(response.choices[0].message.content);\n} catch (e) {\n  throw new Error('LLM response is not valid JSON: ' + response.choices[0].message.content);\n}\n\nconst results = Array.isArray(parsed) ? parsed : (parsed.results ?? []);\nif (results.length === 0) {\n  throw new Error('LLM returned empty results array');\n}\n\nconst validSeverities = ['low', 'medium', 'high', 'critical'];\nfor (const item of results) {\n  if (!item.record_id || !item.severity) throw new Error('LLM result missing record_id or severity');\n  if (!validSeverities.includes(item.severity)) throw new Error('Invalid severity: ' + item.severity);\n}\n\nreturn [{\n  json: {\n    sync_session_id: upstream.sync_session_id,\n    farm_id: upstream.farm_id,\n    owner_id: upstream.owner_id,\n    production_type: upstream.production_type,\n    record_count: upstream.record_count,\n    results,\n    llm_model: response.model,\n    tokens_used: response.usage?.total_tokens ?? null,\n    evaluated_at: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "stb-http-09",
+      "name": "Refresh Analytical Views",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2160, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/rpc/notify_sync_analysis_complete' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { p_farm_id: $json.farm_id, p_owner_id: $json.owner_id, p_sync_session_id: $json.sync_session_id, p_record_count: $json.record_count } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Poll Every Minute": {
+      "main": [
+        [{ "node": "Poll Unprocessed Records", "type": "main", "index": 0 }]
+      ]
+    },
+    "Poll Unprocessed Records": {
+      "main": [
+        [{ "node": "Extract Sync Session", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Sync Session": {
+      "main": [
+        [{ "node": "Mark As Processed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark As Processed": {
+      "main": [
+        [{ "node": "Fetch Health Records Batch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Health Records Batch": {
+      "main": [
+        [{ "node": "Build Batch LLM Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Batch LLM Prompt": {
+      "main": [
+        [{ "node": "Call Batch LLM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Batch LLM": {
+      "main": [
+        [{ "node": "Parse Batch Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Batch Response": {
+      "main": [
+        [{ "node": "Refresh Analytical Views", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}

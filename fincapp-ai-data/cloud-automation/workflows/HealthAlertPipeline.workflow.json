@@ -1,0 +1,188 @@
+{
+  "name": "HealthAlertPipeline",
+  "meta": {
+    "description": "US-02-JUANPABLO — Receives Supabase health_records webhook events, classifies symptom severity via DeepSeek LLM (Low/Medium/High/Critical), and routes urgent Telegram alerts to farm owners for High/Critical findings. Expected Supabase webhook payload: { type, table, schema, record: { id, farm_id, owner_id, production_type, animal_count_affected, symptoms_text, reported_at, reported_by } }"
+  },
+  "nodes": [
+    {
+      "id": "health-wh-01",
+      "name": "Inbound Health Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "health-alert/inbound",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "health-code-02",
+      "name": "Parse Health Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body ?? raw;\nconst record = body.record ?? body;\n\nconst required = ['farm_id', 'owner_id', 'production_type', 'symptoms_text'];\nfor (const field of required) {\n  if (!record[field]) {\n    throw new Error('Missing required field: ' + field);\n  }\n}\n\nconst validTypes = ['cattle', 'swine', 'poultry'];\nif (!validTypes.includes(record.production_type)) {\n  throw new Error('Invalid production_type: ' + record.production_type);\n}\n\nreturn [{\n  json: {\n    record_id: record.id ?? null,\n    farm_id: record.farm_id,\n    owner_id: record.owner_id,\n    production_type: record.production_type,\n    animal_count_affected: record.animal_count_affected ?? null,\n    symptoms_text: record.symptoms_text,\n    reported_at: record.reported_at ?? new Date().toISOString(),\n    reported_by: record.reported_by ?? null\n  }\n}];"
+      }
+    },
+    {
+      "id": "health-code-03",
+      "name": "Build Severity Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nconst model = $env.DEEPSEEK_MODEL || 'deepseek-chat';\n\nconst systemPrompt = 'You are FincApp\\'s veterinary AI analyst. IMPORTANT: Respond exclusively in English. Do not use Spanish under any circumstance. Classify health severity and return ONLY valid JSON with all text fields written in English.';\n\nconst userPrompt = 'Farm: ' + p.farm_id + '. Type: ' + p.production_type + '. Affected: ' + (p.animal_count_affected || 'unknown') + '. Symptoms: ' + p.symptoms_text + '. Return JSON with: severity (low/medium/high/critical), confidence (0-1), summary, suspected_condition, contagion_risk (bool), immediate_actions (array), notify_veterinarian (bool).';\n\nreturn [{\n  json: {\n    ...p,\n    llm_model: model,\n    prompt_system: systemPrompt,\n    prompt_user: userPrompt\n  }\n}];"
+      }
+    },
+    {
+      "id": "health-http-04",
+      "name": "Call Health LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [960, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.DEEPSEEK_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.llm_model, response_format: { type: 'json_object' }, temperature: 0.1, messages: [{ role: 'system', content: $json.prompt_system }, { role: 'user', content: $json.prompt_user }] } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "health-code-05",
+      "name": "Parse LLM Severity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst upstream = $('Build Severity Prompt').first().json;\n\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('LLM returned no choices — check DEEPSEEK_API_KEY env var');\n}\n\nlet analysis;\ntry {\n  analysis = JSON.parse(response.choices[0].message.content);\n} catch (e) {\n  throw new Error('LLM response is not valid JSON: ' + response.choices[0].message.content);\n}\n\nconst required = ['severity', 'summary', 'immediate_actions'];\nfor (const field of required) {\n  if (!(field in analysis)) {\n    throw new Error('LLM response missing field: ' + field);\n  }\n}\n\nconst validSeverities = ['low', 'medium', 'high', 'critical'];\nif (!validSeverities.includes(analysis.severity)) {\n  throw new Error('Invalid severity value: ' + analysis.severity);\n}\n\nreturn [{\n  json: {\n    record_id: upstream.record_id,\n    farm_id: upstream.farm_id,\n    owner_id: upstream.owner_id,\n    production_type: upstream.production_type,\n    symptoms_text: upstream.symptoms_text,\n    reported_at: upstream.reported_at,\n    severity: analysis.severity,\n    confidence: analysis.confidence ?? null,\n    summary: analysis.summary,\n    suspected_condition: analysis.suspected_condition ?? null,\n    contagion_risk: analysis.contagion_risk ?? false,\n    immediate_actions: analysis.immediate_actions ?? [],\n    notify_veterinarian: analysis.notify_veterinarian ?? false,\n    llm_model: response.model,\n    analyzed_at: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "health-if-06",
+      "name": "Route High Priority",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-high",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "cond-critical",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "health-code-07",
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 300],
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nconst emoji = p.severity === 'critical' ? '🔴' : '🟠';\nconst contagion = p.contagion_risk ? 'YES — QUARANTINE IMMEDIATELY' : 'No';\nconst actionItems = (p.immediate_actions || ['Consult a veterinarian']).map(a => '• ' + a);\nconst vetNote = p.notify_veterinarian ? ['', '⚕️ Notify veterinarian immediately'] : [];\nconst parts = [\n  emoji + ' *FINCAPP HEALTH ALERT — ' + p.severity.toUpperCase() + '*',\n  '',\n  'Farm: ' + p.farm_id,\n  'Type: ' + p.production_type,\n  'Condition: ' + (p.suspected_condition || 'Under assessment'),\n  'Contagion risk: ' + contagion\n].concat(vetNote).concat([\n  '',\n  '*Summary:* ' + p.summary,\n  '',\n  '*Immediate actions:*'\n]).concat(actionItems).concat(['', '_Analyzed: ' + p.analyzed_at + '_']);\nreturn [{ json: { ...p, telegram_message: parts.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "health-http-08",
+      "name": "Send Urgent Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1920, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $env.TELEGRAM_BOT_TOKEN + '/sendMessage' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $env.TELEGRAM_CHAT_ID, text: $json.telegram_message, parse_mode: 'Markdown' }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Inbound Health Webhook": {
+      "main": [
+        [{ "node": "Parse Health Record", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Health Record": {
+      "main": [
+        [{ "node": "Build Severity Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Severity Prompt": {
+      "main": [
+        [{ "node": "Call Health LLM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Health LLM": {
+      "main": [
+        [{ "node": "Parse LLM Severity", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse LLM Severity": {
+      "main": [
+        [{ "node": "Route High Priority", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route High Priority": {
+      "main": [
+        [{ "node": "Format Alert Message", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Format Alert Message": {
+      "main": [
+        [{ "node": "Send Urgent Alert", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}

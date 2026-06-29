@@ -1,0 +1,59 @@
+{
+  "production_type": "all",
+  "version": "1.0",
+  "description": "US-03 batch health analysis — classifies multiple health records simultaneously in a single LLM call to avoid per-record query loops",
+  "llm_config": {
+    "temperature": 0.1,
+    "response_format": "json_object"
+  },
+  "system": "You are FincApp's veterinary AI analyst for Colombian and Latin American livestock operations. Analyze batches of animal health records and return structured JSON. Respond ONLY with a valid JSON object — no markdown, no explanation.",
+  "user_template": "Analyze the following batch of {record_count} animal health records from a {production_type} farm sync session.\n\nFarm ID: {farm_id}\nSync Session: {sync_session_id}\nSynced At: {synced_at}\n\nHealth Records:\n{records_block}\n\nReturn a JSON object with a results array. Each element must correspond to one record in the same order, with fields: record_id (same Record ID above), severity (low/medium/high/critical), summary (one sentence clinical assessment), contagion_risk (boolean), immediate_action_required (boolean).",
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["results"],
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["record_id", "severity", "summary", "contagion_risk", "immediate_action_required"],
+          "properties": {
+            "record_id":                { "type": "string" },
+            "severity":                 { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+            "summary":                  { "type": "string" },
+            "contagion_risk":           { "type": "boolean" },
+            "immediate_action_required":{ "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "example_input": {
+    "farm_id": "uuid-farm",
+    "owner_id": "uuid-owner",
+    "sync_session_id": "uuid-session",
+    "production_type": "cattle",
+    "records": [
+      { "id": "rec-001", "animal_id": "A47", "symptoms_text": "Excessive salivation, blisters on tongue and hooves, high fever 40.5°C" },
+      { "id": "rec-002", "animal_id": "A48", "symptoms_text": "Mild lameness in rear left leg, eating normally, no fever" }
+    ]
+  },
+  "example_output": {
+    "results": [
+      {
+        "record_id": "rec-001",
+        "severity": "critical",
+        "summary": "Clinical presentation strongly indicates Foot-and-Mouth Disease with vesicular lesions and high fever — immediate quarantine required.",
+        "contagion_risk": true,
+        "immediate_action_required": true
+      },
+      {
+        "record_id": "rec-002",
+        "severity": "low",
+        "summary": "Isolated mild lameness with no systemic signs — monitor for 48 hours and consult veterinarian if condition worsens.",
+        "contagion_risk": false,
+        "immediate_action_required": false
+      }
+    ]
+  }
+}

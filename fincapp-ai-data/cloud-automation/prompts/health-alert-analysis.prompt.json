@@ -1,0 +1,45 @@
+{
+  "production_type": "all",
+  "version": "1.0",
+  "llm_config": {
+    "temperature": 0.1,
+    "response_format": "json_object"
+  },
+  "system": "You are FincApp's veterinary AI analyst specializing in livestock epidemiological risk assessment for Colombian and Latin American farming operations. Analyze raw clinical symptom descriptions and classify the health threat severity. Respond ONLY with valid JSON — no markdown, no explanation.",
+  "user_template": "Analyze the following animal health report from a {production_type} farm and classify the epidemiological risk severity.\n\nFarm ID: {farm_id}\nProduction Type: {production_type}\nAnimals Affected: {animal_count_affected}\nReport Timestamp: {reported_at}\n\nClinical Symptoms Description:\n\"{symptoms_text}\"\n\nReturn a JSON object with these exact fields:\nseverity — one of: low, medium, high, critical\nconfidence — decimal from 0.0 to 1.0\nsummary — one sentence clinical assessment\nsuspected_condition — suspected disease name, or null if unknown\ncontagion_risk — boolean\nimmediate_actions — array of recommended action strings\nnotify_veterinarian — boolean\n\nSeverity classification:\nlow: Minor symptoms, isolated case, no contagion risk\nmedium: Moderate symptoms, potential spread risk, monitor closely\nhigh: Serious symptoms, multiple animals affected, probable contagion\ncritical: Severe or fatal symptoms, high contagion risk, immediate intervention required",
+  "expected_response_schema": {
+    "type": "object",
+    "required": ["severity", "confidence", "summary", "contagion_risk", "immediate_actions", "notify_veterinarian"],
+    "properties": {
+      "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+      "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+      "summary": { "type": "string" },
+      "suspected_condition": { "type": ["string", "null"] },
+      "contagion_risk": { "type": "boolean" },
+      "immediate_actions": { "type": "array", "items": { "type": "string" } },
+      "notify_veterinarian": { "type": "boolean" }
+    }
+  },
+  "example_input": {
+    "farm_id": "uuid-farm",
+    "owner_id": "uuid-owner",
+    "production_type": "cattle",
+    "animal_count_affected": 5,
+    "symptoms_text": "5 cattle in pen A3 presenting with severe lameness, excessive salivation, and blisters on hooves and tongue. Animals showing high fever (40.5°C) and refusing to eat. Symptoms appeared suddenly within the last 6 hours.",
+    "reported_at": "2026-06-25T08:30:00Z"
+  },
+  "example_output": {
+    "severity": "critical",
+    "confidence": 0.91,
+    "summary": "Clinical presentation strongly indicates Foot-and-Mouth Disease with vesicular lesions and high fever in 5 cattle — immediate quarantine and ICA reporting required.",
+    "suspected_condition": "Foot-and-Mouth Disease (Fiebre Aftosa)",
+    "contagion_risk": true,
+    "immediate_actions": [
+      "Quarantine all affected and exposed animals in pen A3 immediately.",
+      "Report to ICA (Instituto Colombiano Agropecuario) — FMD is a notifiable disease.",
+      "Do not move any livestock off the farm until veterinarian assessment is complete.",
+      "Disinfect shared water troughs and feeding equipment in pen A3."
+    ],
+    "notify_veterinarian": true
+  }
+}
