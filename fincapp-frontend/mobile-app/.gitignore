@@ -3,5 +3,5 @@
 local.properties
 build/
 app/build/
-captures/
 *.iml
+captures/

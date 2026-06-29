@@ -1,34 +1,6 @@
 package com.irwi.fincapp.sync;
-
-import android.content.Context;
-import android.util.Log;
-
-import androidx.annotation.NonNull;
-import androidx.work.Worker;
-import androidx.work.WorkerParameters;
-
-import com.irwi.fincapp.repository.SyncRepository;
-
-public class SyncWorker extends Worker {
-    private static final String TAG = "FincAppSync";
-
-    public SyncWorker(@NonNull Context context, @NonNull WorkerParameters workerParams) {
-        super(context, workerParams);
-    }
-
-    @NonNull
-    @Override
-    public Result doWork() {
-        Log.d(TAG, "SyncWorker started in background.");
-        SyncRepository repository = new SyncRepository(getApplicationContext());
-
-        boolean success = repository.dispatchPendingRows();
-        if (success) {
-            Log.d(TAG, "SyncWorker finished successfully.");
-            return Result.success();
-        }
-
-        Log.e(TAG, "SyncWorker requested retry.");
-        return Result.retry();
-    }
+import android.content.*;import android.database.*;import android.database.sqlite.SQLiteDatabase;import android.util.Log;import androidx.annotation.NonNull;import androidx.work.*;import com.irwi.fincapp.database.DatabaseHelper;import com.irwi.fincapp.network.*;import com.irwi.fincapp.session.SessionManager;import java.util.*;import retrofit2.Response;
+public class SyncWorker extends Worker{ public SyncWorker(@NonNull Context c,@NonNull WorkerParameters p){super(c,p);} @NonNull public Result doWork(){try{Context c=getApplicationContext();DatabaseHelper h=new DatabaseHelper(c);SQLiteDatabase db=h.getReadableDatabase();ArrayList<Map<String,Object>> animals=rows(db,"animals");ArrayList<Map<String,Object>> weights=rows(db,"weight_logs");ArrayList<Map<String,Object>> health=rows(db,"health_records");int total=animals.size()+weights.size()+health.size();Log.d("FincAppSync","Pending rows: "+total); if(total==0)return Result.success();SessionManager s=new SessionManager(c);Map<String,Object> payload=new HashMap<>();payload.put("device_uuid",android.provider.Settings.Secure.getString(c.getContentResolver(),android.provider.Settings.Secure.ANDROID_ID));payload.put("payload_mutations",mapOf(animals,weights,health));Response<Object> resp=ApiClient.service(s.baseUrl()).sync(s.farmId(),payload).execute(); if(resp.isSuccessful()){SQLiteDatabase w=h.getWritableDatabase();w.execSQL("UPDATE animals SET sync_status='synced' WHERE sync_status='pending'");w.execSQL("UPDATE weight_logs SET sync_status='synced' WHERE sync_status='pending'");w.execSQL("UPDATE health_records SET sync_status='synced' WHERE sync_status='pending'");w.execSQL("UPDATE sync_queue SET sync_status='synced' WHERE sync_status='pending'");Log.d("FincAppSync","Sync success");return Result.success();}Log.e("FincAppSync","Sync failed HTTP "+resp.code());return Result.retry();}catch(Exception e){Log.e("FincAppSync","Retry sync",e);return Result.retry();}}
+ private Map<String,Object> mapOf(Object a,Object b,Object c){Map<String,Object> m=new HashMap<>();m.put("animals",a);m.put("weight_logs",b);m.put("health_records",c);return m;}
+ private ArrayList<Map<String,Object>> rows(SQLiteDatabase db,String table){ArrayList<Map<String,Object>> list=new ArrayList<>();Cursor c=db.rawQuery("SELECT * FROM "+table+" WHERE sync_status='pending'",null);try{while(c.moveToNext()){Map<String,Object> m=new HashMap<>();for(int i=0;i<c.getColumnCount();i++)m.put(c.getColumnName(i),c.getString(i));list.add(m);}}finally{c.close();}return list;}
 }
