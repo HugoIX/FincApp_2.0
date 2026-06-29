@@ -1,0 +1,209 @@
+{
+  "name": "FarmWeeklySummaryWorkflow",
+  "meta": {
+    "description": "US-18-JUANPABLO — Generates and sends a weekly farm summary email via Resend. Includes inventory (animals.type), weight metrics (weight_logs.weight_kg), health records, and an AURA recommendation. Webhook for demo; swap for Schedule Trigger in production."
+  },
+  "nodes": [
+    {
+      "id": "fws-wh-01",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "farm/weekly-summary",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "fws-http-02",
+      "name": "Fetch Animals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/animals' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,type,status" },
+            { "name": "limit",  "value": "500" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fws-http-03",
+      "name": "Fetch Weight Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [720, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/weight_logs' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "weight_kg,log_date" },
+            { "name": "order",  "value": "log_date.desc" },
+            { "name": "limit",  "value": "200" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fws-http-04",
+      "name": "Fetch Health Records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [960, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/health_records' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,animal_id,symptoms_description,recorded_at" },
+            { "name": "order",  "value": "recorded_at.desc" },
+            { "name": "limit",  "value": "20" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fws-code-05",
+      "name": "Compile Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "jsCode": "const rawAnimals = $('Fetch Animals').first().json;\nconst animalsArr = Array.isArray(rawAnimals) ? rawAnimals : [];\n\nconst rawWeights = $('Fetch Weight Logs').first().json;\nconst weightsArr = Array.isArray(rawWeights) ? rawWeights : [];\n\nconst rawHealth = $input.first().json;\nconst healthArr = Array.isArray(rawHealth) ? rawHealth : [];\n\nconst totalAnimals = animalsArr.length;\nconst byCattle  = animalsArr.filter(a => (a.type || '').toLowerCase() === 'cattle').length;\nconst bySwine   = animalsArr.filter(a => (a.type || '').toLowerCase() === 'swine').length;\nconst byPoultry = animalsArr.filter(a => (a.type || '').toLowerCase() === 'poultry').length;\n\nconst withWeight = weightsArr.filter(w => w.weight_kg > 0);\nconst avgWeight = withWeight.length > 0\n  ? (withWeight.reduce((s, w) => s + parseFloat(w.weight_kg), 0) / withWeight.length).toFixed(1)\n  : null;\nconst maxWeight = withWeight.length > 0\n  ? Math.max(...withWeight.map(w => parseFloat(w.weight_kg))).toFixed(1)\n  : null;\nconst minWeight = withWeight.length > 0\n  ? Math.min(...withWeight.map(w => parseFloat(w.weight_kg))).toFixed(1)\n  : null;\n\nconst recentAlerts = healthArr.slice(0, 3).map(r => ({\n  animal_id: r.animal_id,\n  symptoms: (r.symptoms_description || '').substring(0, 90),\n  date: r.recorded_at ? r.recorded_at.split('T')[0] : 'N/A'\n}));\n\nconst has_data = totalAnimals > 0;\nconst model = $env.DEEPSEEK_MODEL || 'deepseek-chat';\n\nconst systemPrompt = 'You are AURA, FincApp farm operations assistant. Return ONLY valid JSON in English. One sentence recommendation.';\nconst userPrompt = 'Weekly farm: ' + totalAnimals + ' animals (' + byCattle + ' cattle, ' + bySwine + ' swine, ' + byPoultry + ' poultry). Weight logs: ' + withWeight.length + ' entries, avg ' + (avgWeight || 'no data') + ' kg. Recent health records: ' + healthArr.length + '. Return JSON: recommendation (one sentence), priority (low/medium/high), safe_wording (if health risk else null).';\n\nreturn [{\n  json: {\n    has_data, totalAnimals, byCattle, bySwine, byPoultry,\n    avgWeight, maxWeight, minWeight, weightEntries: withWeight.length,\n    totalHealthRecords: healthArr.length, recentAlerts,\n    report_date: new Date().toISOString().split('T')[0],\n    llm_model: model, prompt_system: systemPrompt, prompt_user: userPrompt\n  }\n}];"
+      }
+    },
+    {
+      "id": "fws-http-06",
+      "name": "Get AURA Recommendation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.DEEPSEEK_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.llm_model, response_format: { type: 'json_object' }, temperature: 0.3, messages: [{ role: 'system', content: $json.prompt_system }, { role: 'user', content: $json.prompt_user }] } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "fws-code-07",
+      "name": "Build Email HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 300],
+      "parameters": {
+        "jsCode": "const d = $('Compile Report Data').first().json;\nconst llmRaw = $input.first().json;\n\nconst fallbackRec = { recommendation: 'Keep monitoring your animals daily and log all health events so AURA can detect patterns early.', priority: 'low', safe_wording: null };\nlet rec = fallbackRec;\ntry {\n  const parsed = JSON.parse(llmRaw.choices[0].message.content);\n  if (parsed.recommendation) rec = parsed;\n} catch (e) {}\n\nconst noData = '<span style=\"color:#999;font-style:italic\">No data available</span>';\nconst pColor = { low: '#27ae60', medium: '#f39c12', high: '#e74c3c' }[rec.priority] || '#666';\nconst tdS = 'padding:8px 12px;border-bottom:1px solid #eee;';\nconst thS = 'background:#1a1a2e;color:#2ecc71;padding:10px 12px;text-align:left;font-size:13px;';\n\nconst inv = d.has_data\n  ? '<tr><td style=\"' + tdS + '\">Total Animals</td><td style=\"' + tdS + '\"><strong>' + d.totalAnimals + '</strong></td></tr>' +\n    '<tr><td style=\"' + tdS + '\">Cattle</td><td style=\"' + tdS + '\">' + d.byCattle + '</td></tr>' +\n    '<tr><td style=\"' + tdS + '\">Swine</td><td style=\"' + tdS + '\">' + d.bySwine + '</td></tr>' +\n    '<tr><td style=\"' + tdS + '\">Poultry</td><td style=\"' + tdS + '\">' + d.byPoultry + '</td></tr>'\n  : '<tr><td colspan=\"2\" style=\"' + tdS + '\">' + noData + '</td></tr>';\n\nconst wgt = d.avgWeight\n  ? '<tr><td style=\"' + tdS + '\">Average Weight</td><td style=\"' + tdS + '\"><strong>' + d.avgWeight + ' kg</strong></td></tr>' +\n    '<tr><td style=\"' + tdS + '\">Max Weight</td><td style=\"' + tdS + '\">' + d.maxWeight + ' kg</td></tr>' +\n    '<tr><td style=\"' + tdS + '\">Min Weight</td><td style=\"' + tdS + '\">' + d.minWeight + ' kg</td></tr>' +\n    '<tr><td style=\"' + tdS + '\">Log Entries</td><td style=\"' + tdS + '\">' + d.weightEntries + '</td></tr>'\n  : '<tr><td colspan=\"2\" style=\"' + tdS + '\">' + noData + '</td></tr>';\n\nconst hlth = d.totalHealthRecords > 0\n  ? '<tr><td style=\"' + tdS + '\">Total Records</td><td style=\"' + tdS + '\">' + d.totalHealthRecords + '</td></tr>' +\n    d.recentAlerts.map(a =>\n      '<tr><td style=\"' + tdS + 'font-size:12px;color:#555;\">Animal ' + a.animal_id.substring(0,8) + '... — ' + a.date + '</td>' +\n      '<td style=\"' + tdS + 'font-size:12px;color:#555;\">' + a.symptoms + '</td></tr>'\n    ).join('')\n  : '<tr><td colspan=\"2\" style=\"' + tdS + '\">' + noData + '</td></tr>';\n\nconst safeBlock = rec.safe_wording\n  ? '<p style=\"background:#fff3cd;border-left:4px solid #f39c12;padding:10px;margin-top:12px;font-size:13px;\">⚠️ ' + rec.safe_wording + '</p>'\n  : '';\n\nconst section = (title) => '<h2 style=\"color:#1a1a2e;border-bottom:2px solid #2ecc71;padding-bottom:6px;margin-top:24px;\">' + title + '</h2>';\nconst table = (rows) => '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><thead><tr><th style=\"' + thS + '\">Metric</th><th style=\"' + thS + '\">Value</th></tr></thead><tbody>' + rows + '</tbody></table>';\n\nconst html = '<!DOCTYPE html><html><body style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#333;\">' +\n  '<div style=\"background:#1a1a2e;padding:20px;text-align:center;\">' +\n  '<h1 style=\"color:#2ecc71;margin:0;\">AURA</h1>' +\n  '<p style=\"color:#aaa;margin:4px 0 0;\">FincApp Weekly Farm Summary — ' + d.report_date + '</p></div>' +\n  '<div style=\"padding:20px;\">' +\n  section('Inventory') + table(inv) +\n  section('Weight Metrics') + table(wgt) +\n  section('Health Records') + table(hlth) +\n  section('AURA Recommendation') +\n  '<div style=\"background:#f8f9fa;border-radius:8px;padding:16px;\">' +\n  '<span style=\"background:' + pColor + ';color:#fff;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;\">' + rec.priority.toUpperCase() + '</span>' +\n  '<p style=\"margin:10px 0 0;\">' + rec.recommendation + '</p>' + safeBlock + '</div>' +\n  '</div><div style=\"background:#f1f1f1;padding:12px;text-align:center;font-size:11px;color:#999;\">' +\n  'FincApp · AURA does not replace professional veterinary advice · ' + d.report_date + '</div>' +\n  '</body></html>';\n\nreturn [{ json: { html, subject: 'FincApp Weekly Farm Summary — ' + d.report_date } }];"
+      }
+    },
+    {
+      "id": "fws-http-08",
+      "name": "Send Email via Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1920, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.RESEND_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { from: $env.REPORT_EMAIL_FROM, to: [$env.REPORT_EMAIL_TO], subject: $json.subject, html: $json.html } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "fws-respond-09",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2160, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'sent', email: $env.REPORT_EMAIL_TO, subject: $('Build Email HTML').first().json.subject } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger Webhook": {
+      "main": [[{ "node": "Fetch Animals",           "type": "main", "index": 0 }]]
+    },
+    "Fetch Animals": {
+      "main": [[{ "node": "Fetch Weight Logs",        "type": "main", "index": 0 }]]
+    },
+    "Fetch Weight Logs": {
+      "main": [[{ "node": "Fetch Health Records",     "type": "main", "index": 0 }]]
+    },
+    "Fetch Health Records": {
+      "main": [[{ "node": "Compile Report Data",      "type": "main", "index": 0 }]]
+    },
+    "Compile Report Data": {
+      "main": [[{ "node": "Get AURA Recommendation",  "type": "main", "index": 0 }]]
+    },
+    "Get AURA Recommendation": {
+      "main": [[{ "node": "Build Email HTML",         "type": "main", "index": 0 }]]
+    },
+    "Build Email HTML": {
+      "main": [[{ "node": "Send Email via Resend",    "type": "main", "index": 0 }]]
+    },
+    "Send Email via Resend": {
+      "main": [[{ "node": "Respond Success",          "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any"
+  }
+}
