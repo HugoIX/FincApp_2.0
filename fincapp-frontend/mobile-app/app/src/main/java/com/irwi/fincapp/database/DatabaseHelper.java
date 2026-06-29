@@ -10,44 +10,46 @@ import com.irwi.fincapp.models.Animal;
 import com.irwi.fincapp.models.HealthRecord;
 import com.irwi.fincapp.models.WeightLog;
 import com.irwi.fincapp.models.SyncQueueItem;
+import com.irwi.fincapp.network.dto.*;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
+import java.util.UUID;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
     public static final String DB_NAME = "fincapp_local.db";
-    public static final int DB_VERSION = 2;
+    public static final int DB_VERSION = 4;
     public static final String PENDING = "pending";
+    public static final String SYNCED = "synced";
 
     public DatabaseHelper(Context context) { super(context, DB_NAME, null, DB_VERSION); }
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        // US-01 support tables
-        db.execSQL("CREATE TABLE IF NOT EXISTS local_users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, sync_status TEXT DEFAULT 'pending')");
-        db.execSQL("CREATE TABLE IF NOT EXISTS local_farms (id INTEGER PRIMARY KEY AUTOINCREMENT, cloud_id TEXT, name TEXT NOT NULL, location TEXT, sync_status TEXT DEFAULT 'pending')");
-        db.execSQL("CREATE TABLE IF NOT EXISTS local_production_modules (id INTEGER PRIMARY KEY AUTOINCREMENT, farm_id INTEGER, module_name TEXT NOT NULL, sync_status TEXT DEFAULT 'pending')");
+        db.execSQL("CREATE TABLE IF NOT EXISTS local_users (id INTEGER PRIMARY KEY AUTOINCREMENT, cloud_id TEXT, name TEXT, email TEXT, token TEXT, sync_status TEXT DEFAULT 'synced')");
+        db.execSQL("CREATE TABLE IF NOT EXISTS local_farms (id INTEGER PRIMARY KEY AUTOINCREMENT, cloud_id TEXT UNIQUE, name TEXT NOT NULL, location TEXT, sync_status TEXT DEFAULT 'synced')");
+        db.execSQL("CREATE TABLE IF NOT EXISTS local_production_modules (id INTEGER PRIMARY KEY AUTOINCREMENT, farm_id INTEGER, module_name TEXT NOT NULL, sync_status TEXT DEFAULT 'synced')");
 
-        // US-02 / US-09 SQLite <-> Cloud contract names. sync_status is added for US-02 offline sync readiness.
         db.execSQL("CREATE TABLE IF NOT EXISTS animals (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "cloud_id TEXT, " +
+                "cloud_id TEXT NOT NULL UNIQUE, " +
                 "farm_cloud_id TEXT, " +
                 "type TEXT NOT NULL, " +
                 "identification_tag TEXT NOT NULL, " +
                 "birth_date TEXT, " +
-                "status TEXT NOT NULL DEFAULT 'active', " +
+                "status TEXT NOT NULL DEFAULT 'healthy', " +
                 "created_at TEXT NOT NULL, " +
                 "sync_status TEXT NOT NULL DEFAULT 'pending')");
 
         db.execSQL("CREATE TABLE IF NOT EXISTS weight_logs (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "cloud_id TEXT, " +
+                "cloud_id TEXT NOT NULL UNIQUE, " +
                 "animal_id INTEGER NOT NULL, " +
-                "animal_cloud_id TEXT, " +
+                "animal_cloud_id TEXT NOT NULL, " +
                 "weight_kg REAL NOT NULL, " +
                 "log_date TEXT NOT NULL, " +
                 "sync_status TEXT NOT NULL DEFAULT 'pending', " +
@@ -55,9 +57,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         db.execSQL("CREATE TABLE IF NOT EXISTS health_records (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "cloud_id TEXT, " +
+                "cloud_id TEXT NOT NULL UNIQUE, " +
                 "animal_id INTEGER NOT NULL, " +
-                "animal_cloud_id TEXT, " +
+                "animal_cloud_id TEXT NOT NULL, " +
                 "symptoms_description TEXT NOT NULL, " +
                 "diagnosis TEXT, " +
                 "treatment_administered TEXT, " +
@@ -88,8 +90,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public static String now() {
-        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        format.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return format.format(new Date());
     }
+
+    public static String uuid() { return UUID.randomUUID().toString(); }
 
     private void enqueue(SQLiteDatabase db, String entityName, String operationType, long entityId, String summary) {
         ContentValues values = new ContentValues();
@@ -102,18 +108,29 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.insert("sync_queue", null, values);
     }
 
+    public void upsertFarm(String cloudId, String name, String location) {
+        if (cloudId == null || cloudId.isEmpty()) return;
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("cloud_id", cloudId);
+        values.put("name", name == null ? "Unnamed farm" : name);
+        values.put("location", location);
+        values.put("sync_status", SYNCED);
+        db.insertWithOnConflict("local_farms", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
     public long insertAnimal(String farmCloudId, String type, String identificationTag, String birthDate, String status) {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         long id;
         try {
             ContentValues values = new ContentValues();
-            values.put("cloud_id", (String) null);
+            values.put("cloud_id", uuid());
             values.put("farm_cloud_id", farmCloudId);
-            values.put("type", type);
+            values.put("type", normalizeType(type));
             values.put("identification_tag", identificationTag);
-            values.put("birth_date", birthDate);
-            values.put("status", status);
+            values.put("birth_date", emptyToNull(birthDate));
+            values.put("status", status == null || status.trim().isEmpty() ? "healthy" : status.trim());
             values.put("created_at", now());
             values.put("sync_status", PENDING);
             id = db.insertOrThrow("animals", null, values);
@@ -143,11 +160,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public long insertWeightLog(long animalId, double weightKg) {
+        String animalCloudId = getAnimalCloudId(animalId);
+        if (animalCloudId == null || animalCloudId.isEmpty()) throw new IllegalArgumentException("Animal does not exist");
         SQLiteDatabase db = getWritableDatabase();
         ContentValues values = new ContentValues();
-        values.put("cloud_id", (String) null);
+        values.put("cloud_id", uuid());
         values.put("animal_id", animalId);
-        values.put("animal_cloud_id", (String) null);
+        values.put("animal_cloud_id", animalCloudId);
         values.put("weight_kg", weightKg);
         values.put("log_date", now());
         values.put("sync_status", PENDING);
@@ -157,14 +176,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public long insertHealthRecord(long animalId, String symptoms, String diagnosis, String treatment) {
+        String animalCloudId = getAnimalCloudId(animalId);
+        if (animalCloudId == null || animalCloudId.isEmpty()) throw new IllegalArgumentException("Animal does not exist");
         SQLiteDatabase db = getWritableDatabase();
         ContentValues values = new ContentValues();
-        values.put("cloud_id", (String) null);
+        values.put("cloud_id", uuid());
         values.put("animal_id", animalId);
-        values.put("animal_cloud_id", (String) null);
+        values.put("animal_cloud_id", animalCloudId);
         values.put("symptoms_description", symptoms);
-        values.put("diagnosis", diagnosis);
-        values.put("treatment_administered", treatment);
+        values.put("diagnosis", emptyToNull(diagnosis));
+        values.put("treatment_administered", emptyToNull(treatment));
         values.put("recorded_at", now());
         values.put("sync_status", PENDING);
         long id = db.insertOrThrow("health_records", null, values);
@@ -175,77 +196,139 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public List<Animal> getAnimals() {
         List<Animal> animals = new ArrayList<>();
         Cursor c = getReadableDatabase().rawQuery("SELECT id, cloud_id, farm_cloud_id, type, identification_tag, birth_date, status, created_at, sync_status FROM animals ORDER BY id DESC", null);
-        try {
-            while (c.moveToNext()) {
-                animals.add(new Animal(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8)));
-            }
-        } finally { c.close(); }
+        try { while (c.moveToNext()) animals.add(readAnimal(c)); }
+        finally { c.close(); }
         return animals;
+    }
+
+    public List<Animal> getPendingAnimals() {
+        List<Animal> animals = new ArrayList<>();
+        Cursor c = getReadableDatabase().rawQuery("SELECT id, cloud_id, farm_cloud_id, type, identification_tag, birth_date, status, created_at, sync_status FROM animals WHERE sync_status='pending' ORDER BY id ASC", null);
+        try { while (c.moveToNext()) animals.add(readAnimal(c)); }
+        finally { c.close(); }
+        return animals;
+    }
+
+    private Animal readAnimal(Cursor c) {
+        return new Animal(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8));
     }
 
     public List<WeightLog> getWeightLogs(long animalId) {
         List<WeightLog> logs = new ArrayList<>();
-        Cursor c = getReadableDatabase().rawQuery("SELECT id, animal_id, weight_kg, log_date FROM weight_logs WHERE animal_id=? ORDER BY id DESC", new String[]{String.valueOf(animalId)});
-        try { while (c.moveToNext()) logs.add(new WeightLog(c.getLong(0), c.getLong(1), c.getDouble(2), c.getString(3))); }
+        Cursor c = getReadableDatabase().rawQuery("SELECT id, cloud_id, animal_id, animal_cloud_id, weight_kg, log_date, sync_status FROM weight_logs WHERE animal_id=? ORDER BY id DESC", new String[]{String.valueOf(animalId)});
+        try { while (c.moveToNext()) logs.add(readWeight(c)); }
         finally { c.close(); }
         return logs;
     }
 
+    public List<WeightLog> getPendingWeightLogs() {
+        List<WeightLog> logs = new ArrayList<>();
+        Cursor c = getReadableDatabase().rawQuery("SELECT id, cloud_id, animal_id, animal_cloud_id, weight_kg, log_date, sync_status FROM weight_logs WHERE sync_status='pending' ORDER BY id ASC", null);
+        try { while (c.moveToNext()) logs.add(readWeight(c)); }
+        finally { c.close(); }
+        return logs;
+    }
+
+    private WeightLog readWeight(Cursor c) {
+        return new WeightLog(c.getLong(0), c.getString(1), c.getLong(2), c.getString(3), c.getDouble(4), c.getString(5), c.getString(6));
+    }
+
     public List<HealthRecord> getHealthRecords(long animalId) {
         List<HealthRecord> records = new ArrayList<>();
-        Cursor c = getReadableDatabase().rawQuery("SELECT id, animal_id, symptoms_description, diagnosis, treatment_administered, recorded_at FROM health_records WHERE animal_id=? ORDER BY id DESC", new String[]{String.valueOf(animalId)});
-        try { while (c.moveToNext()) records.add(new HealthRecord(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5))); }
+        Cursor c = getReadableDatabase().rawQuery("SELECT id, cloud_id, animal_id, animal_cloud_id, symptoms_description, diagnosis, treatment_administered, recorded_at, sync_status FROM health_records WHERE animal_id=? ORDER BY id DESC", new String[]{String.valueOf(animalId)});
+        try { while (c.moveToNext()) records.add(readHealth(c)); }
         finally { c.close(); }
         return records;
     }
 
-
-    public List<SyncQueueItem> getPendingSyncQueueItems() {
-        List<SyncQueueItem> items = new ArrayList<>();
-        Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, entity_name, operation_type, entity_id, payload_summary, sync_status, created_at " +
-                        "FROM sync_queue WHERE sync_status='pending' ORDER BY id ASC", null);
-        try {
-            while (c.moveToNext()) {
-                items.add(new SyncQueueItem(
-                        c.getLong(0), c.getString(1), c.getString(2), c.getLong(3),
-                        c.getString(4), c.getString(5), c.getString(6)));
-            }
-        } finally { c.close(); }
-        return items;
+    public List<HealthRecord> getPendingHealthRecords() {
+        List<HealthRecord> records = new ArrayList<>();
+        Cursor c = getReadableDatabase().rawQuery("SELECT id, cloud_id, animal_id, animal_cloud_id, symptoms_description, diagnosis, treatment_administered, recorded_at, sync_status FROM health_records WHERE sync_status='pending' ORDER BY id ASC", null);
+        try { while (c.moveToNext()) records.add(readHealth(c)); }
+        finally { c.close(); }
+        return records;
     }
 
-    public void markQueueItemsAsSynced(List<SyncQueueItem> items) {
-        if (items == null || items.isEmpty()) return;
+    private HealthRecord readHealth(Cursor c) {
+        return new HealthRecord(c.getLong(0), c.getString(1), c.getLong(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8));
+    }
+
+    public PayloadMutationsDto buildPendingPayload() {
+        PayloadMutationsDto payload = new PayloadMutationsDto();
+        for (Animal a : getPendingAnimals()) {
+            SyncAnimalDto dto = new SyncAnimalDto();
+            dto.id = a.cloudId;
+            dto.type = normalizeType(a.type);
+            dto.identificationTag = a.identificationTag;
+            dto.birthDate = emptyToNull(a.birthDate);
+            dto.status = a.status == null || a.status.isEmpty() ? "healthy" : a.status;
+            payload.animals.add(dto);
+        }
+        for (WeightLog w : getPendingWeightLogs()) {
+            SyncWeightLogDto dto = new SyncWeightLogDto();
+            dto.id = w.cloudId;
+            dto.animalId = w.animalCloudId;
+            dto.weightKg = w.weightKg;
+            dto.logDate = w.logDate;
+            payload.weightLogs.add(dto);
+        }
+        for (HealthRecord h : getPendingHealthRecords()) {
+            SyncHealthRecordDto dto = new SyncHealthRecordDto();
+            dto.id = h.cloudId;
+            dto.animalId = h.animalCloudId;
+            dto.symptomsDescription = h.symptomsDescription;
+            dto.diagnosis = emptyToNull(h.diagnosis);
+            dto.treatmentAdministered = emptyToNull(h.treatmentAdministered);
+            dto.recordedAt = h.recordedAt;
+            payload.healthRecords.add(dto);
+        }
+        return payload;
+    }
+
+    public void markAllPendingAsSynced() {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            ContentValues queueValues = new ContentValues();
-            queueValues.put("sync_status", "synced");
-            for (SyncQueueItem item : items) {
-                db.update("sync_queue", queueValues, "id=?", new String[]{String.valueOf(item.id)});
-                markEntityAsSyncedInsideTransaction(db, item.entityName, item.entityId);
-            }
+            ContentValues values = new ContentValues();
+            values.put("sync_status", SYNCED);
+            db.update("animals", values, "sync_status='pending'", null);
+            db.update("weight_logs", values, "sync_status='pending'", null);
+            db.update("health_records", values, "sync_status='pending'", null);
+            db.update("sync_queue", values, "sync_status='pending'", null);
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
     }
 
-    private void markEntityAsSyncedInsideTransaction(SQLiteDatabase db, String entityName, long entityId) {
-        if (!"animals".equals(entityName) && !"weight_logs".equals(entityName) && !"health_records".equals(entityName)) {
-            return;
-        }
-        ContentValues values = new ContentValues();
-        values.put("sync_status", "synced");
-        db.update(entityName, values, "id=?", new String[]{String.valueOf(entityId)});
-    }
-
-    public void markQueueItemsPendingAfterFailure(List<SyncQueueItem> items) {
-        // Keep rows as pending. This method exists for readability and Logcat traceability in the sync layer.
-        // WorkManager handles the retry using exponential backoff.
-    }
-
     public int pendingSyncCount() {
-        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM sync_queue WHERE sync_status='pending'", null);
+        Cursor c = getReadableDatabase().rawQuery("SELECT (SELECT COUNT(*) FROM animals WHERE sync_status='pending') + (SELECT COUNT(*) FROM weight_logs WHERE sync_status='pending') + (SELECT COUNT(*) FROM health_records WHERE sync_status='pending')", null);
         try { return c.moveToFirst() ? c.getInt(0) : 0; } finally { c.close(); }
+    }
+
+    public List<SyncQueueItem> getPendingSyncQueueItems() {
+        List<SyncQueueItem> items = new ArrayList<>();
+        Cursor c = getReadableDatabase().rawQuery("SELECT id, entity_name, operation_type, entity_id, payload_summary, sync_status, created_at FROM sync_queue WHERE sync_status='pending' ORDER BY id ASC", null);
+        try { while (c.moveToNext()) items.add(new SyncQueueItem(c.getLong(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), c.getString(5), c.getString(6))); }
+        finally { c.close(); }
+        return items;
+    }
+
+    public void markQueueItemsAsSynced(List<SyncQueueItem> items) { markAllPendingAsSynced(); }
+    public void markQueueItemsPendingAfterFailure(List<SyncQueueItem> items) { }
+
+    private String getAnimalCloudId(long animalId) {
+        Cursor c = getReadableDatabase().rawQuery("SELECT cloud_id FROM animals WHERE id=?", new String[]{String.valueOf(animalId)});
+        try { return c.moveToFirst() ? c.getString(0) : null; } finally { c.close(); }
+    }
+
+    private String normalizeType(String type) {
+        if (type == null) return "Cattle";
+        String t = type.trim().toLowerCase(Locale.US);
+        if (t.contains("swine") || t.contains("pig") || t.contains("cerdo")) return "Swine";
+        if (t.contains("poultry") || t.contains("chicken") || t.contains("ave") || t.contains("pollo")) return "Poultry";
+        return "Cattle";
+    }
+
+    private String emptyToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 }
