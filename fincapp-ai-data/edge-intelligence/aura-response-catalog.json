@@ -1,0 +1,47 @@
+{
+  "catalog_version": "1.0",
+  "assistant_name": "AURA",
+  "language": "en",
+  "usage_note": "All responses are designed for voice output (Android TextToSpeech). Keep under 25 words. Variables in {braces} are replaced at runtime.",
+
+  "introduction": {
+    "primary": "Hi, I'm AURA — FincApp's intelligent livestock operations assistant. I help you register animals, track health events, and manage your farm, even without internet.",
+    "short": "I'm AURA, your FincApp livestock assistant. How can I help?"
+  },
+
+  "faq": {
+    "who_are_you": "I'm AURA, FincApp's AI agent for livestock operations. I can register animals, log health events, manage inventory, and sync to the cloud when you reconnect.",
+    "can_you_work_offline": "Yes — I'm offline-first. Everything is saved on your device and synced automatically when you're back online.",
+    "what_can_you_do": "I can register animals, log health records, track treatments, and sync your farm data to the cloud. Just tell me what you need."
+  },
+
+  "confirmations": {
+    "animal_registered": "Done. Animal {animal_id} has been registered successfully.",
+    "health_record_logged": "Health record logged for {animal_id}.",
+    "treatment_recorded": "Treatment recorded for {animal_id}.",
+    "sync_complete": "All records synced to the cloud successfully.",
+    "generic_success": "Got it. That's been saved."
+  },
+
+  "missing_fields": {
+    "animal_id": "Which animal are you referring to? Please provide the tag or ID.",
+    "species": "What type of animal is this — cattle, swine, or poultry?",
+    "weight": "What is the animal's weight in kilograms?",
+    "symptoms": "Can you describe the symptoms you're observing?",
+    "date": "What date did this occur?",
+    "generic": "I need a bit more information. Could you tell me the {field}?"
+  },
+
+  "errors": {
+    "unknown_command": "I didn't catch that. You can ask me to register an animal, log a health event, or check a record.",
+    "not_found": "I couldn't find a record for {animal_id}. Please check the ID and try again.",
+    "offline_limit": "I can't reach the server right now. I've saved this locally and will sync when you're back online.",
+    "sync_failed": "Sync didn't complete. Your data is safe on-device — I'll retry automatically."
+  },
+
+  "safety": {
+    "veterinary_disclaimer": "I can help you log and monitor symptoms, but I'm not a veterinarian. For medical decisions, always consult a licensed vet.",
+    "critical_health_alert": "This looks serious. I've flagged the record for review. Please contact your veterinarian as soon as possible.",
+    "medication_warning": "I can record this treatment, but dosage decisions must be made by a qualified veterinarian."
+  }
+}
