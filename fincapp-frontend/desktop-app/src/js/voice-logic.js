@@ -20,8 +20,8 @@ let auraProcessing = false;
 let auraListenStartedAt = 0;
 let auraIsAutoRestart = false;
 
-const AURA_DEFAULT_SILENCE_MS = 3500;
-const AURA_ANIMAL_REGISTER_SILENCE_MS = 7500;
+const AURA_DEFAULT_SILENCE_MS = 1500;
+const AURA_ANIMAL_REGISTER_SILENCE_MS = 3000;
 const AURA_MAX_LISTEN_MS = 30000;
 
 export function initVoiceAssistant() {
@@ -241,18 +241,7 @@ function setupRecognition() {
 
     if (elapsed < AURA_MAX_LISTEN_MS) {
       updateAuraLiveTranscript(transcript);
-
-      setTimeout(() => {
-        try {
-          if (!auraProcessing && recognition) {
-            auraIsAutoRestart = true;
-            recognition.start();
-          }
-        } catch (error) {
-          console.warn('[AURA] auto-restart recognition error:', error);
-        }
-      }, 350);
-
+      processBufferedAuraCommand('auto-stop');
       return;
     }
 
