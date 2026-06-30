@@ -13,7 +13,7 @@ using Microsoft.Extensions.Configuration;
 namespace FincApp.API.Controllers;
 
 [ApiController]
-[Route("api/aura")]
+[Route("api/v1/aura")]
 public class AuraToolAgentController : ControllerBase
 {
     private static readonly HttpClient Http = new();
@@ -508,7 +508,11 @@ public class AuraToolAgentController : ControllerBase
 
             case "open_module":
             {
-                var module = GetStringArg(response, "module") ?? GetStringArg(response, "target_module") ?? "dashboard";
+                // Try to get the module from tool_args, or infer from intent/tool_name
+                var module = GetStringArg(response, "module")
+                    ?? GetStringArg(response, "target_module")
+                    ?? InferModuleFromIntentOrTool(response.Intent, response.ToolName)
+                    ?? "dashboard";
                 response.Action = ModuleToAction(module);
                 response.UiAction = response.Action;
                 response.AssistantMessage = $"Abriré el módulo de {ModuleLabel(module)}.";
@@ -1864,7 +1868,36 @@ public class AuraToolAgentController : ControllerBase
         if (ContainsAny(t, "search_animal") || ContainsAny(i, "search_animal"))
             return "search_animal_by_tag";
 
-        if (ContainsAny(t, "open_module") || ContainsAny(a, "open_dashboard", "open_inventory", "open_reports", "open_health", "open_weights"))
+        if (ContainsAny(t, "open_module") || ContainsAny(a, "open_dashboard", "open_inventory", "open_reports", "open_health", "open_weights", "open_activities", "open_settings"))
+            return "open_module";
+
+        // Navigation intents where Gemini uses view_* or navigate_* tool names
+        if (ContainsAny(t, "view_inventory", "open_inventory", "navigate_inventory", "show_inventory") ||
+            ContainsAny(i, "view_inventory", "open_inventory"))
+            return "open_module";
+
+        if (ContainsAny(t, "view_dashboard", "open_dashboard", "navigate_dashboard", "show_dashboard") ||
+            ContainsAny(i, "view_dashboard", "open_dashboard"))
+            return "open_module";
+
+        if (ContainsAny(t, "view_reports", "open_reports", "navigate_reports", "show_reports") ||
+            ContainsAny(i, "view_reports", "open_reports"))
+            return "open_module";
+
+        if (ContainsAny(t, "view_health", "open_health", "navigate_health", "show_health") ||
+            ContainsAny(i, "view_health", "open_health"))
+            return "open_module";
+
+        if (ContainsAny(t, "view_activities", "open_activities", "navigate_activities", "show_activities") ||
+            ContainsAny(i, "view_activities", "open_activities"))
+            return "open_module";
+
+        if (ContainsAny(t, "view_weights", "open_weights", "navigate_weights", "show_weights") ||
+            ContainsAny(i, "view_weights", "open_weights"))
+            return "open_module";
+
+        if (ContainsAny(t, "view_settings", "open_settings", "navigate_settings") ||
+            ContainsAny(i, "view_settings", "open_settings"))
             return "open_module";
 
         return string.IsNullOrWhiteSpace(toolName) ? "unknown" : toolName!;
@@ -1906,17 +1939,32 @@ public class AuraToolAgentController : ControllerBase
         };
     }
 
+    private static string? InferModuleFromIntentOrTool(string? intent, string? toolName)
+    {
+        var s = Normalize((intent ?? "") + " " + (toolName ?? ""));
+
+        if (ContainsAny(s, "inventory", "inventario", "animales", "ganado")) return "inventory";
+        if (ContainsAny(s, "dashboard", "inicio", "resumen", "panel")) return "dashboard";
+        if (ContainsAny(s, "report", "reporte", "informe", "analisis")) return "reports";
+        if (ContainsAny(s, "health", "salud", "vacuna", "sanidad")) return "health";
+        if (ContainsAny(s, "activit", "actividad", "tarea", "labor")) return "activities";
+        if (ContainsAny(s, "weight", "peso", "pesaje", "bascula")) return "weights";
+        if (ContainsAny(s, "setting", "ajuste", "configuracion", "configuración")) return "settings";
+
+        return null;
+    }
+
     private static string ModuleToAction(string module)
     {
         return Normalize(module) switch
         {
-            "dashboard" => "open_dashboard",
-            "inventory" => "open_inventory",
-            "weights" => "open_weight_registration",
-            "health" => "open_health_registration",
-            "activities" => "open_activity_registration",
-            "reports" => "open_reports",
-            "settings" => "open_settings",
+            "dashboard" or "inicio" or "resumen" or "panel" => "open_dashboard",
+            "inventory" or "inventario" or "animales" or "ganado" => "open_inventory",
+            "weights" or "weight" or "pesos" or "peso" or "pesaje" or "bascula" => "open_weight_registration",
+            "health" or "salud" or "vacuna" or "sanidad" => "open_health_registration",
+            "activities" or "actividades" or "actividad" or "tarea" or "tareas" => "open_activity_registration",
+            "reports" or "reportes" or "reporte" or "informe" or "informes" => "open_reports",
+            "settings" or "ajustes" or "ajuste" or "configuracion" or "configuración" => "open_settings",
             _ => "open_dashboard"
         };
     }
@@ -1925,16 +1973,17 @@ public class AuraToolAgentController : ControllerBase
     {
         return Normalize(module) switch
         {
-            "dashboard" => "dashboard",
-            "inventory" => "inventario",
-            "weights" => "control de peso",
-            "health" => "salud",
-            "activities" => "actividades",
-            "reports" => "reportes",
-            "settings" => "ajustes",
+            "dashboard" or "inicio" or "resumen" or "panel" => "dashboard",
+            "inventory" or "inventario" or "animales" or "ganado" => "inventario",
+            "weights" or "weight" or "pesos" or "peso" => "control de peso",
+            "health" or "salud" or "vacuna" => "salud",
+            "activities" or "actividades" or "actividad" => "actividades",
+            "reports" or "reportes" or "reporte" or "informe" => "reportes",
+            "settings" or "ajustes" or "ajuste" or "configuracion" => "ajustes",
             _ => module
         };
     }
+
 
     private static string ExtractGeminiText(string rawResponse)
     {

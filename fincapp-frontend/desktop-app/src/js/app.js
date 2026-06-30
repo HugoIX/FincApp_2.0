@@ -5,7 +5,7 @@
 
 import { initAuth, getCurrentUser, logout as authLogout } from './auth.js';
 import { initRouter, navigateTo } from './router.js';
-import { initVoiceAssistant, toggleVoice, speak } from './voice-logic.js';
+import { initVoiceAssistant, toggleVoice, speak } from './voice-logic.js?v=v2';
 import { updateOnlineStatus, startOfflineSync } from './api.js';
 import { showToast } from './ui-utils.js';
 import { loadTheme, toggleTheme } from './settings.js';
@@ -42,7 +42,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Mobile sidebar toggle
-    document.getElementById('menu-toggle')?.addEventListener('click', () => {
+    document.getElementById('menu-toggle')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         document.getElementById('sidebar')?.classList.toggle('open');
     });
 

@@ -3,7 +3,7 @@
  * Supports the legacy Node backend, old frontend endpoint names, and offline-first fallback.
  */
 
-const BASE_URL = localStorage.getItem('fincapp_api_base_url') || 'http://localhost:5211/api';
+const BASE_URL = localStorage.getItem('fincapp_api_base_url') || 'https://fincapp.crudzaso.com/api/v1';
 const PYTHON_URL = localStorage.getItem('fincapp_ai_base_url') || '';
 const OFFLINE_QUEUE_KEY = 'fincapp_offline_queue';
 

@@ -11,12 +11,14 @@ let recognition = null;
 let isListening = false;
 let ttsEnabled = localStorage.getItem('fincapp_tts_enabled') !== 'false';
 
-let finalTranscriptBuffer = '';
-let interimTranscriptBuffer = '';
+let previousSessionsText = '';
+let currentSessionFinal = '';
+let currentSessionInterim = '';
 let auraSilenceTimer = null;
 let auraMaxListenTimer = null;
 let auraProcessing = false;
 let auraListenStartedAt = 0;
+let auraIsAutoRestart = false;
 
 const AURA_DEFAULT_SILENCE_MS = 3500;
 const AURA_ANIMAL_REGISTER_SILENCE_MS = 7500;
@@ -97,7 +99,7 @@ function browserSpeechFallback(text) {
 }
 
 function getAuraSpeechApiBaseUrl() {
-  return (localStorage.getItem('fincapp_api_base_url') || 'http://localhost:5211/api')
+  return (localStorage.getItem('fincapp_api_base_url') || 'https://fincapp.crudzaso.com/api/v1')
     .replace(/\/$/, '');
 }
 
@@ -143,27 +145,35 @@ function setupRecognition() {
 
   recognition.onstart = () => {
     setListeningState(true);
-
-    finalTranscriptBuffer = '';
-    interimTranscriptBuffer = '';
     auraProcessing = false;
-    auraListenStartedAt = Date.now();
-
     clearTimeout(auraSilenceTimer);
-    clearTimeout(auraMaxListenTimer);
 
-    auraMaxListenTimer = setTimeout(() => {
-      processBufferedAuraCommand('max-time');
-    }, AURA_MAX_LISTEN_MS);
+    if (!auraIsAutoRestart) {
+      previousSessionsText = '';
+      currentSessionFinal = '';
+      currentSessionInterim = '';
+      auraListenStartedAt = Date.now();
 
-    showToast('AURA está escuchando. Puedes decir el comando completo...', 'info');
+      clearTimeout(auraMaxListenTimer);
+      auraMaxListenTimer = setTimeout(() => {
+        processBufferedAuraCommand('max-time');
+      }, AURA_MAX_LISTEN_MS);
+
+      showToast('AURA está escuchando. Puedes decir el comando completo...', 'info');
+    } else {
+      previousSessionsText = `${previousSessionsText} ${currentSessionFinal}`.trim();
+      currentSessionFinal = '';
+      currentSessionInterim = '';
+    }
+
+    auraIsAutoRestart = false;
   };
 
   recognition.onresult = async (event) => {
     let newFinalText = '';
     let newInterimText = '';
 
-    for (let i = event.resultIndex; i < event.results.length; i++) {
+    for (let i = 0; i < event.results.length; i++) {
       const result = event.results[i];
       const transcript = result[0].transcript || '';
 
@@ -174,13 +184,10 @@ function setupRecognition() {
       }
     }
 
-    if (newFinalText.trim()) {
-      finalTranscriptBuffer = `${finalTranscriptBuffer} ${newFinalText}`.trim();
-    }
+    currentSessionFinal = newFinalText.trim();
+    currentSessionInterim = newInterimText.trim();
 
-    interimTranscriptBuffer = newInterimText.trim();
-
-    const currentTranscript = `${finalTranscriptBuffer} ${interimTranscriptBuffer}`.trim();
+    const currentTranscript = `${previousSessionsText} ${currentSessionFinal} ${currentSessionInterim}`.trim();
 
     if (!currentTranscript) return;
 
@@ -200,7 +207,7 @@ function setupRecognition() {
     setListeningState(false);
 
     if (event.error === 'no-speech') {
-      const transcript = `${finalTranscriptBuffer} ${interimTranscriptBuffer}`.trim();
+      const transcript = `${previousSessionsText} ${currentSessionFinal} ${currentSessionInterim}`.trim();
 
       if (transcript) {
         updateAuraLiveTranscript(transcript);
@@ -224,7 +231,7 @@ function setupRecognition() {
   recognition.onend = () => {
     setListeningState(false);
 
-    const transcript = `${finalTranscriptBuffer} ${interimTranscriptBuffer}`.trim();
+    const transcript = `${previousSessionsText} ${currentSessionFinal} ${currentSessionInterim}`.trim();
 
     if (!transcript || auraProcessing) {
       return;
@@ -238,6 +245,7 @@ function setupRecognition() {
       setTimeout(() => {
         try {
           if (!auraProcessing && recognition) {
+            auraIsAutoRestart = true;
             recognition.start();
           }
         } catch (error) {
@@ -357,7 +365,7 @@ function scheduleAuraProcessing(transcript) {
 async function processBufferedAuraCommand(reason = 'silence') {
   if (auraProcessing) return;
 
-  const transcript = `${finalTranscriptBuffer} ${interimTranscriptBuffer}`.trim();
+  const transcript = `${previousSessionsText} ${currentSessionFinal} ${currentSessionInterim}`.trim();
 
   if (!transcript) return;
 
@@ -378,12 +386,18 @@ async function processBufferedAuraCommand(reason = 'silence') {
 
   showToast(`AURA procesando comando completo: "${transcript}"`, 'info');
 
-  finalTranscriptBuffer = '';
-  interimTranscriptBuffer = '';
+  previousSessionsText = '';
+  currentSessionFinal = '';
+  currentSessionInterim = '';
 
-  await handleAuraCommand(transcript);
-
-  auraProcessing = false;
+  try {
+    await handleAuraCommand(transcript);
+  } catch (err) {
+    console.error('[AURA] Fallo al procesar el comando:', err);
+    showToast('Ocurrió un error inesperado al procesar el comando de voz.', 'error');
+  } finally {
+    auraProcessing = false;
+  }
 }
 
 

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5211/api';
+const API_BASE_URL = 'https://fincapp.crudzaso.com/api/v1';
 const SESSION_ID = `aura-presentation-${Date.now()}`;
 
 const wakeBtn = document.getElementById('wakeBtn');

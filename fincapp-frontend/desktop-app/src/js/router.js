@@ -62,6 +62,12 @@ export async function navigateTo(viewKey) {
             btn.classList.toggle('active', btn.dataset.view === viewKey);
         });
 
+        // Close mobile sidebar on navigation
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar?.classList.contains('open')) {
+            sidebar.classList.remove('open');
+        }
+
         // Execute view's post-render logic
         await initViewLogic(viewKey);
         currentView = viewKey;

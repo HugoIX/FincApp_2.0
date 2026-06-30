@@ -17,7 +17,7 @@ using Microsoft.Extensions.Configuration;
 namespace FincApp.API.Controllers;
 
 [ApiController]
-[Route("api/aura")]
+[Route("api/v1/aura")]
 public class AuraAgentController : ControllerBase
 {
   private static readonly HttpClient GeminiHttp = new();

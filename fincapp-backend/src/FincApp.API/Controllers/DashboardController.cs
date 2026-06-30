@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FincApp.API.Controllers;
 
 [ApiController]
-[Route("api/dashboard")]
+[Route("api/v1/dashboard")]
 public class DashboardController : ControllerBase
 {
     private readonly FincAppDbContext _context;

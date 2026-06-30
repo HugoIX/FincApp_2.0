@@ -178,7 +178,7 @@ function renderLoginForm() {
             farm_name: document.getElementById('reg-farm').value,
             phone: document.getElementById('reg-phone').value,
             password: document.getElementById('reg-password').value,
-            role: 'farmer'
+            role: 1 // 1 corresponds to UserRole.Worker in backend
         };
 
         const result = await registerUser(userData);
@@ -200,9 +200,10 @@ function renderLoginForm() {
 async function loginUser(email, password) {
     try {
         const result = await apiService.post('auth/login', { email, password });
-        if (result.token && result.user) {
-            setCurrentUser({ ...result.user, token: result.token });
-            return { success: true, user: result.user };
+        if (result.token && (result.user || result.email)) {
+            const userObj = result.user || { id: result.id, email: result.email, role: result.role };
+            setCurrentUser({ ...userObj, token: result.token });
+            return { success: true, user: userObj };
         }
         return { success: false, message: result.message || 'Invalid credentials' };
     } catch (err) {

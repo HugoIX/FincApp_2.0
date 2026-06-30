@@ -143,6 +143,8 @@ public class AuraController : ControllerBase
   }
 
   [HttpPost("/api/v1/aura/parse")]
+  [HttpPost("/api/v1/aura/ask")]
+  [HttpPost("/api/aura/ask")]
   public IActionResult ParseV1([FromBody] AuraParseRequest request)
   {
     return Parse(request);

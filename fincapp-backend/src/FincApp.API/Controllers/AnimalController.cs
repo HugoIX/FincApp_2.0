@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FincApp.API.Controllers;
 
 [ApiController]
-[Route("api")]
+[Route("api/v1")]
 public class AnimalController : ControllerBase
 {
     private readonly FincAppDbContext _context;

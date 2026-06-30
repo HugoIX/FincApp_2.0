@@ -51,7 +51,8 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-        if (user == null || user.PasswordHash != HashPassword(request.Password))
+        var passwordHash = HashPassword(request.Password);
+        if (user == null || (user.PasswordHash != passwordHash && user.PasswordHash != request.Password))
         {
             return Unauthorized(new { message = "Invalid email or password" });
         }
