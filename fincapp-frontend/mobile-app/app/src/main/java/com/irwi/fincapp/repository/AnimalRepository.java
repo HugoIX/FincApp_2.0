@@ -1,12 +1,103 @@
 package com.irwi.fincapp.repository;
-import android.content.*;import android.database.*;import android.database.sqlite.SQLiteDatabase;import com.irwi.fincapp.database.DatabaseHelper;import java.text.SimpleDateFormat;import java.util.*;
-public class AnimalRepository{
- private final DatabaseHelper h; public AnimalRepository(Context c){h=new DatabaseHelper(c);} private String now(){return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",Locale.US).format(new Date());}
- public long addAnimal(String farmId,String type,String tag,String birth){SQLiteDatabase db=h.getWritableDatabase();ContentValues v=new ContentValues();v.put("cloud_id",UUID.randomUUID().toString());v.put("farm_cloud_id",farmId);v.put("type",type);v.put("identification_tag",tag);v.put("birth_date",birth);v.put("status","active");v.put("created_at",now());v.put("sync_status","pending");long id=db.insert("animals",null,v);queue("animals",id,"create");return id;}
- public void addWeight(long animalId,double kg){SQLiteDatabase db=h.getWritableDatabase();String cloud=getAnimalCloud(animalId);ContentValues v=new ContentValues();v.put("cloud_id",UUID.randomUUID().toString());v.put("animal_id",animalId);v.put("animal_cloud_id",cloud);v.put("weight_kg",kg);v.put("log_date",now());v.put("sync_status","pending");long id=db.insert("weight_logs",null,v);queue("weight_logs",id,"create");}
- public void addHealth(long animalId,String symptoms,String diagnosis,String treatment){SQLiteDatabase db=h.getWritableDatabase();String cloud=getAnimalCloud(animalId);ContentValues v=new ContentValues();v.put("cloud_id",UUID.randomUUID().toString());v.put("animal_id",animalId);v.put("animal_cloud_id",cloud);v.put("symptoms_description",symptoms);v.put("diagnosis",diagnosis);v.put("treatment_administered",treatment);v.put("recorded_at",now());v.put("sync_status","pending");long id=db.insert("health_records",null,v);queue("health_records",id,"create");}
- private void queue(String e,long id,String op){SQLiteDatabase db=h.getWritableDatabase();ContentValues v=new ContentValues();v.put("entity_name",e);v.put("entity_id",id);v.put("operation_type",op);v.put("payload","");v.put("sync_status","pending");v.put("created_at",now());db.insert("sync_queue",null,v);} 
- public Cursor animals(){return h.getReadableDatabase().rawQuery("SELECT id, identification_tag, type, sync_status FROM animals ORDER BY id DESC",null);} 
- public String getAnimalCloud(long id){Cursor c=h.getReadableDatabase().rawQuery("SELECT cloud_id FROM animals WHERE id=?",new String[]{String.valueOf(id)});try{return c.moveToFirst()?c.getString(0):null;}finally{c.close();}}
- public int pendingCount(){Cursor c=h.getReadableDatabase().rawQuery("SELECT COUNT(*) FROM sync_queue WHERE sync_status='pending'",null);try{return c.moveToFirst()?c.getInt(0):0;}finally{c.close();}}
+
+import android.content.ContentValues;
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import com.irwi.fincapp.database.DatabaseHelper;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.UUID;
+
+public class AnimalRepository {
+    private final DatabaseHelper helper;
+
+    public AnimalRepository(Context context) {
+        helper = new DatabaseHelper(context);
+    }
+
+    public long addAnimal(String farmCloudId, String type, String tag, String birthDate, String status) {
+        SQLiteDatabase db = helper.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("cloud_id", UUID.randomUUID().toString());
+        values.put("farm_cloud_id", farmCloudId);
+        values.put("type", type);
+        values.put("identification_tag", tag);
+        values.put("birth_date", blankToNull(birthDate));
+        values.put("status", isBlank(status) ? "healthy" : status);
+        values.put("created_at", now());
+        values.put("sync_status", "pending");
+        long id = db.insert("animals", null, values);
+        queue("animals", id);
+        return id;
+    }
+
+    public long addWeight(long animalId, double weightKg) {
+        SQLiteDatabase db = helper.getWritableDatabase();
+        String cloudId = getAnimalCloudId(animalId);
+        ContentValues values = new ContentValues();
+        values.put("cloud_id", UUID.randomUUID().toString());
+        values.put("animal_id", animalId);
+        values.put("animal_cloud_id", cloudId);
+        values.put("weight_kg", weightKg);
+        values.put("log_date", now());
+        values.put("sync_status", "pending");
+        long id = db.insert("weight_logs", null, values);
+        queue("weight_logs", id);
+        return id;
+    }
+
+    public long addHealth(long animalId, String symptoms, String diagnosis, String treatment) {
+        SQLiteDatabase db = helper.getWritableDatabase();
+        String cloudId = getAnimalCloudId(animalId);
+        ContentValues values = new ContentValues();
+        values.put("cloud_id", UUID.randomUUID().toString());
+        values.put("animal_id", animalId);
+        values.put("animal_cloud_id", cloudId);
+        values.put("symptoms_description", symptoms);
+        values.put("diagnosis", blankToNull(diagnosis));
+        values.put("treatment_administered", blankToNull(treatment));
+        values.put("recorded_at", now());
+        values.put("sync_status", "pending");
+        long id = db.insert("health_records", null, values);
+        queue("health_records", id);
+        return id;
+    }
+
+    public Cursor animalsByType(String farmCloudId, String type) {
+        return helper.getReadableDatabase().rawQuery(
+                "SELECT id, identification_tag, type, sync_status, cloud_id FROM animals WHERE farm_cloud_id=? AND type=? ORDER BY id DESC",
+                new String[]{farmCloudId, type}
+        );
+    }
+
+    public int pendingCount() {
+        Cursor c = helper.getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM sync_queue WHERE sync_status='pending'", null);
+        try { return c.moveToFirst() ? c.getInt(0) : 0; } finally { c.close(); }
+    }
+
+    public String getAnimalCloudId(long animalId) {
+        Cursor c = helper.getReadableDatabase().rawQuery(
+                "SELECT cloud_id FROM animals WHERE id=?", new String[]{String.valueOf(animalId)});
+        try { return c.moveToFirst() ? c.getString(0) : ""; } finally { c.close(); }
+    }
+
+    private void queue(String entity, long entityId) {
+        ContentValues values = new ContentValues();
+        values.put("entity_name", entity);
+        values.put("entity_id", entityId);
+        values.put("operation_type", "create");
+        values.put("sync_status", "pending");
+        values.put("created_at", now());
+        helper.getWritableDatabase().insert("sync_queue", null, values);
+    }
+
+    private String now() {
+        return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(new Date());
+    }
+
+    private String blankToNull(String value) { return isBlank(value) ? null : value.trim(); }
+    private boolean isBlank(String value) { return value == null || value.trim().isEmpty(); }
 }

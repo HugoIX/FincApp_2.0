@@ -7,6 +7,7 @@ import com.irwi.fincapp.models.ProductionModule;
 import java.util.List;
 
 public class ModuleRepository {
+
     private final DatabaseHelper databaseHelper;
 
     public ModuleRepository(DatabaseHelper databaseHelper) {

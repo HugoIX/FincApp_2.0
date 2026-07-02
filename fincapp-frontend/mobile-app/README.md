@@ -1,48 +1,51 @@
-# FincApp Mobile Final
+# FincApp Mobile - Backend Connected
 
-Cliente Android nativo en Java para FincApp.
-
-## Flujo incluido
-
-1. Splash / presentación
-2. Login demo o login básico
-3. Selección de finca
-4. Home con módulos Cattle, Swine, Poultry y AURA
-5. CRUD offline de animales
-6. Registro offline de pesos y salud
-7. SQLite local con `sync_status = pending/synced`
-8. WorkManager para sincronización automática
-9. Retrofit preparado para backend .NET
-10. Pantalla de Settings para cambiar URL del backend sin mostrarla en el Home
-
-## URL del backend
-
-Para emulador Android:
+Android native mobile app in Java connected to the deployed FincApp backend:
 
 ```text
-http://10.0.2.2:5211/api/
+http://167.233.35.176/api/
 ```
 
-Para celular físico:
+## Main flow
 
-```text
-http://IP_DE_TU_PC:5211/api/
-```
+Splash → Login → Farm selection → Home → Cattle/Swine/Poultry forms → AURA → Background sync.
 
-Cuando el backend esté en VPS:
+## What it does
 
-```text
-https://TU_DOMINIO_O_IP/api/
-```
+- Validates login against `POST /api/v1/auth/login`.
+- Loads farms from `GET /api/v1/farms` and caches them locally in SQLite.
+- Registers animals offline in SQLite.
+- Adds weight logs and health records offline.
+- Sends pending records to `POST /api/v1/farms/{farmId}/sync` using Retrofit.
+- Sends the required `X-Farm-Id` header.
+- Uses WorkManager with network constraints and exponential backoff.
+- Connects AURA to `POST /api/aura/tool-agent`.
+- Keeps API keys out of Android. The app only talks to the backend.
 
-## Importante
+## Important
 
-No incluir API keys en Android. Gemini, ElevenLabs y Supabase deben quedarse solo en backend.
+If you already installed an older FincApp APK on the same phone, uninstall it before testing this version. This avoids old SQLite schemas from previous builds.
 
-## Abrir
+## How to open
 
-Abrir exactamente esta carpeta en Android Studio:
+Open exactly this folder in Android Studio:
 
 ```text
 fincapp-frontend/mobile-app
 ```
+
+Do not open only the `app` folder.
+
+## Backend URL
+
+Default URL is configured in:
+
+```text
+app/src/main/java/com/irwi/fincapp/network/ApiConfig.java
+```
+
+```java
+public static final String DEFAULT_BASE_URL = "http://167.233.35.176/api/";
+```
+
+There is also a Settings screen inside the app to change it for testing.

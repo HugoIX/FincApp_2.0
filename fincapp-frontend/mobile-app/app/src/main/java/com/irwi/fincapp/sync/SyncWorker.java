@@ -1,6 +1,134 @@
 package com.irwi.fincapp.sync;
-import android.content.*;import android.database.*;import android.database.sqlite.SQLiteDatabase;import android.util.Log;import androidx.annotation.NonNull;import androidx.work.*;import com.irwi.fincapp.database.DatabaseHelper;import com.irwi.fincapp.network.*;import com.irwi.fincapp.session.SessionManager;import java.util.*;import retrofit2.Response;
-public class SyncWorker extends Worker{ public SyncWorker(@NonNull Context c,@NonNull WorkerParameters p){super(c,p);} @NonNull public Result doWork(){try{Context c=getApplicationContext();DatabaseHelper h=new DatabaseHelper(c);SQLiteDatabase db=h.getReadableDatabase();ArrayList<Map<String,Object>> animals=rows(db,"animals");ArrayList<Map<String,Object>> weights=rows(db,"weight_logs");ArrayList<Map<String,Object>> health=rows(db,"health_records");int total=animals.size()+weights.size()+health.size();Log.d("FincAppSync","Pending rows: "+total); if(total==0)return Result.success();SessionManager s=new SessionManager(c);Map<String,Object> payload=new HashMap<>();payload.put("device_uuid",android.provider.Settings.Secure.getString(c.getContentResolver(),android.provider.Settings.Secure.ANDROID_ID));payload.put("payload_mutations",mapOf(animals,weights,health));Response<Object> resp=ApiClient.service(s.baseUrl()).sync(s.farmId(),payload).execute(); if(resp.isSuccessful()){SQLiteDatabase w=h.getWritableDatabase();w.execSQL("UPDATE animals SET sync_status='synced' WHERE sync_status='pending'");w.execSQL("UPDATE weight_logs SET sync_status='synced' WHERE sync_status='pending'");w.execSQL("UPDATE health_records SET sync_status='synced' WHERE sync_status='pending'");w.execSQL("UPDATE sync_queue SET sync_status='synced' WHERE sync_status='pending'");Log.d("FincAppSync","Sync success");return Result.success();}Log.e("FincAppSync","Sync failed HTTP "+resp.code());return Result.retry();}catch(Exception e){Log.e("FincAppSync","Retry sync",e);return Result.retry();}}
- private Map<String,Object> mapOf(Object a,Object b,Object c){Map<String,Object> m=new HashMap<>();m.put("animals",a);m.put("weight_logs",b);m.put("health_records",c);return m;}
- private ArrayList<Map<String,Object>> rows(SQLiteDatabase db,String table){ArrayList<Map<String,Object>> list=new ArrayList<>();Cursor c=db.rawQuery("SELECT * FROM "+table+" WHERE sync_status='pending'",null);try{while(c.moveToNext()){Map<String,Object> m=new HashMap<>();for(int i=0;i<c.getColumnCount();i++)m.put(c.getColumnName(i),c.getString(i));list.add(m);}}finally{c.close();}return list;}
+
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.provider.Settings;
+import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.work.Worker;
+import androidx.work.WorkerParameters;
+import com.irwi.fincapp.database.DatabaseHelper;
+import com.irwi.fincapp.network.ApiClient;
+import com.irwi.fincapp.session.SessionManager;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import retrofit2.Response;
+
+public class SyncWorker extends Worker {
+    private static final String TAG = "FincAppSync";
+
+    public SyncWorker(@NonNull Context context, @NonNull WorkerParameters params) {
+        super(context, params);
+    }
+
+    @NonNull
+    @Override
+    public Result doWork() {
+        Context context = getApplicationContext();
+        SessionManager session = new SessionManager(context);
+
+        if (!session.isLogged() || session.farmId().isEmpty()) {
+            Log.d(TAG, "Sync skipped: user or farm not selected yet.");
+            return Result.success();
+        }
+
+        try {
+            DatabaseHelper helper = new DatabaseHelper(context);
+            SQLiteDatabase db = helper.getReadableDatabase();
+
+            ArrayList<Map<String, Object>> animals = pendingAnimals(db, session.farmId());
+            ArrayList<Map<String, Object>> weights = pendingWeights(db, session.farmId());
+            ArrayList<Map<String, Object>> health = pendingHealth(db, session.farmId());
+            int total = animals.size() + weights.size() + health.size();
+
+            Log.d(TAG, "Pending rows for sync: " + total);
+            if (total == 0) return Result.success();
+
+            Map<String, Object> mutations = new HashMap<>();
+            mutations.put("animals", animals);
+            mutations.put("weight_logs", weights);
+            mutations.put("health_records", health);
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("device_uuid", Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID));
+            payload.put("user_id", session.userId());
+            payload.put("payload_mutations", mutations);
+
+            Response<Map<String, Object>> response = ApiClient.service(session.baseUrl())
+                    .sync(session.farmId(), session.farmId(), payload)
+                    .execute();
+
+            if (response.isSuccessful()) {
+                SQLiteDatabase writable = helper.getWritableDatabase();
+                writable.execSQL("UPDATE animals SET sync_status='synced' WHERE farm_cloud_id=? AND sync_status='pending'", new Object[]{session.farmId()});
+                writable.execSQL("UPDATE weight_logs SET sync_status='synced' WHERE animal_cloud_id IN (SELECT cloud_id FROM animals WHERE farm_cloud_id=?) AND sync_status='pending'", new Object[]{session.farmId()});
+                writable.execSQL("UPDATE health_records SET sync_status='synced' WHERE animal_cloud_id IN (SELECT cloud_id FROM animals WHERE farm_cloud_id=?) AND sync_status='pending'", new Object[]{session.farmId()});
+                writable.execSQL("UPDATE sync_queue SET sync_status='synced' WHERE sync_status='pending'");
+                Log.d(TAG, "Sync success. Rows sent: " + total);
+                return Result.success();
+            }
+
+            Log.e(TAG, "Sync HTTP error: " + response.code());
+            if (response.code() >= 400 && response.code() < 500) {
+                return Result.failure();
+            }
+            return Result.retry();
+        } catch (Exception exception) {
+            Log.e(TAG, "Sync failed. WorkManager will retry with exponential backoff.", exception);
+            return Result.retry();
+        }
+    }
+
+    private ArrayList<Map<String, Object>> pendingAnimals(SQLiteDatabase db, String farmId) {
+        ArrayList<Map<String, Object>> rows = new ArrayList<>();
+        Cursor c = db.rawQuery("SELECT cloud_id,type,identification_tag,birth_date,status FROM animals WHERE farm_cloud_id=? AND sync_status='pending'", new String[]{farmId});
+        try {
+            while (c.moveToNext()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id", c.getString(0));
+                row.put("type", c.getString(1));
+                row.put("identification_tag", c.getString(2));
+                row.put("birth_date", c.isNull(3) ? null : c.getString(3));
+                row.put("status", c.getString(4));
+                rows.add(row);
+            }
+        } finally { c.close(); }
+        return rows;
+    }
+
+    private ArrayList<Map<String, Object>> pendingWeights(SQLiteDatabase db, String farmId) {
+        ArrayList<Map<String, Object>> rows = new ArrayList<>();
+        Cursor c = db.rawQuery("SELECT w.cloud_id,w.animal_cloud_id,w.weight_kg,w.log_date FROM weight_logs w INNER JOIN animals a ON a.cloud_id=w.animal_cloud_id WHERE a.farm_cloud_id=? AND w.sync_status='pending'", new String[]{farmId});
+        try {
+            while (c.moveToNext()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id", c.getString(0));
+                row.put("animal_id", c.getString(1));
+                row.put("weight_kg", c.getDouble(2));
+                row.put("log_date", c.getString(3));
+                rows.add(row);
+            }
+        } finally { c.close(); }
+        return rows;
+    }
+
+    private ArrayList<Map<String, Object>> pendingHealth(SQLiteDatabase db, String farmId) {
+        ArrayList<Map<String, Object>> rows = new ArrayList<>();
+        Cursor c = db.rawQuery("SELECT h.cloud_id,h.animal_cloud_id,h.symptoms_description,h.diagnosis,h.treatment_administered,h.recorded_at FROM health_records h INNER JOIN animals a ON a.cloud_id=h.animal_cloud_id WHERE a.farm_cloud_id=? AND h.sync_status='pending'", new String[]{farmId});
+        try {
+            while (c.moveToNext()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id", c.getString(0));
+                row.put("animal_id", c.getString(1));
+                row.put("symptoms_description", c.getString(2));
+                row.put("diagnosis", c.isNull(3) ? null : c.getString(3));
+                row.put("treatment_administered", c.isNull(4) ? null : c.getString(4));
+                row.put("recorded_at", c.getString(5));
+                rows.add(row);
+            }
+        } finally { c.close(); }
+        return rows;
+    }
 }
